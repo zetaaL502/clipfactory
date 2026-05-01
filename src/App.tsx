@@ -128,6 +128,13 @@ export default function App() {
     setIsRunning(true);
     setStatus(null);
     try {
+      // Auto-save feed before running
+      await fetch('/api/feed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: feed })
+      });
+
       const res = await fetch('/api/run', { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
@@ -470,6 +477,14 @@ export default function App() {
 
               <section className="space-y-4">
                 <h3 className="text-lg font-semibold text-blue-400">3. Execution</h3>
+                <div className="bg-orange-500/10 border border-orange-500/20 p-5 rounded-xl mb-4 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-orange-300 leading-relaxed">
+                    <strong>Note for Preview / Cloud:</strong> YouTube actively blocks automated requests from cloud IPs (like this preview). 
+                    When running in this preview, the pipeline will fallback to generating blank mock videos to demonstrate the flow.
+                    To process real YouTube videos, <strong className="text-white">export the project and run it locally</strong>.
+                  </p>
+                </div>
                 <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
                   <p className="text-sm text-zinc-300 leading-relaxed mb-4">
                     Run the factory from the root directory of this project. It will read <code className="text-blue-400">feed.txt</code> and begin the pipeline.
