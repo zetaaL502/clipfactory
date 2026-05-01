@@ -10,7 +10,7 @@ const TEMP_DIR = path.join(process.cwd(), "trashed_144p");
 const MAX_CONCURRENT_UPLOADS = 5;
 const MAX_CONCURRENT_ANALYSIS = 5;
 const GEMINI_RPM_LIMIT = 15;
-const MODEL_NAME = "gemini-2.5-flash";
+const MODEL_NAME = "gemini-3-flash-preview";
 
 const uploadLimit = pLimit(MAX_CONCURRENT_UPLOADS);
 const analysisLimit = pLimit(MAX_CONCURRENT_ANALYSIS);
@@ -73,7 +73,7 @@ async function downloadLowRes(url: string, outputPath: string): Promise<boolean>
         format: "worstvideo[height<=144]+worstaudio/worst[height<=144]",
         mergeOutputFormat: "mp4",
         output: outputPath,
-        // @ts-expect-error Types for youtube-dl-exec are missing jsRuntimes
+        
         jsRuntimes: "node"
       });
       return true;

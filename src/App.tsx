@@ -28,7 +28,7 @@ export default function App() {
   const fetchLogsAndClips = async () => {
     try {
       const [logsRes, clipsRes] = await Promise.all([
-        fetch('/api/logs'),
+        fetch('/api/pipeline-status'),
         fetch('/api/clips')
       ]);
       

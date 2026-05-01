@@ -34,7 +34,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/logs", async (req, res) => {
+  app.get("/api/pipeline-status", async (req, res) => {
     try {
       const data = await fs.readFile("pipeline.log", "utf-8");
       res.json({ content: data });
