@@ -1,0 +1,6 @@
+{
+  "name": "Clip Factory",
+  "description": "Automated YouTube clipping service using Gemini 1.5 Flash for visual timestamp detection and 4K extraction.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
