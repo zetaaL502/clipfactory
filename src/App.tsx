@@ -25,35 +25,60 @@ export default function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
-  const fetchData = async () => {
+  const fetchLogsAndClips = async () => {
     try {
-      const [feedRes, logsRes, clipsRes, settingsRes] = await Promise.all([
-        fetch('/api/feed'),
+      const [logsRes, clipsRes] = await Promise.all([
         fetch('/api/logs'),
-        fetch('/api/clips'),
-        fetch('/api/settings')
+        fetch('/api/clips')
       ]);
       
-      const feedData = await feedRes.json();
-      const logsData = await logsRes.json();
-      const clipsData = await clipsRes.json();
-      const settingsData = await settingsRes.json();
+      if (!logsRes.ok || !clipsRes.ok) return;
 
-      if (feedData.content) setFeed(feedData.content);
-      if (logsData.content) setLogs(logsData.content);
-      if (clipsData.files) setClips(clipsData.files);
-      if (settingsData.GOOGLE_API_KEY) setApiKey(settingsData.GOOGLE_API_KEY);
-      
-      // If we see logs indicating it's still running, we might deduce state, 
-      // but for simplicity we rely on manual refresh for running state.
+      const logsText = await logsRes.text();
+      const clipsText = await clipsRes.text();
+
+      try {
+        const logsData = JSON.parse(logsText);
+        const clipsData = JSON.parse(clipsText);
+
+        if (logsData.content !== undefined) setLogs(logsData.content);
+        if (clipsData.files) setClips(clipsData.files);
+      } catch (e) {
+        // Not JSON
+      }
     } catch (err) {
-      console.error("Failed to fetch data", err);
+      console.error("Failed to fetch logs/clips", err);
+    }
+  };
+
+  const fetchInitialData = async () => {
+    try {
+      const [feedRes, settingsRes] = await Promise.all([
+        fetch('/api/feed'),
+        fetch('/api/settings')
+      ]);
+
+      if (!feedRes.ok || !settingsRes.ok) return;
+
+      const feedText = await feedRes.text();
+      const settingsText = await settingsRes.text();
+
+      try {
+        const feedData = JSON.parse(feedText);
+        const settingsData = JSON.parse(settingsText);
+
+        if (feedData.content !== undefined) setFeed(feedData.content);
+        if (settingsData.GOOGLE_API_KEY) setApiKey(settingsData.GOOGLE_API_KEY);
+      } catch (e) {}
+    } catch (err) {
+      console.error("Failed to fetch initial config", err);
     }
   };
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 3000); // Poll every 3s
+    fetchInitialData();
+    fetchLogsAndClips();
+    const interval = setInterval(fetchLogsAndClips, 3000); // Poll every 3s
     return () => clearInterval(interval);
   }, []);
 
@@ -298,7 +323,7 @@ export default function App() {
                   <p className="text-zinc-400 text-sm mt-1">Real-time terminal output from the processing pipeline.</p>
                 </div>
                 <button
-                  onClick={fetchData}
+                  onClick={fetchLogsAndClips}
                   className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors"
                 >
                   <RefreshCcw className="w-5 h-5" />
@@ -339,9 +364,21 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               className="space-y-6"
             >
-              <div>
-                <h2 className="text-2xl font-bold text-white tracking-tight">Generated Clips</h2>
-                <p className="text-zinc-400 text-sm mt-1">Finished 4K extractions ready for use.</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-white tracking-tight">Generated Clips</h2>
+                  <p className="text-zinc-400 text-sm mt-1">Finished 4K extractions ready for use.</p>
+                </div>
+                {clips.length > 0 && (
+                  <a
+                    href="/api/download-all"
+                    download="clips.zip"
+                    className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2 rounded-xl transition-all border border-zinc-700 shadow-lg active:scale-95 font-medium"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download All (ZIP)
+                  </a>
+                )}
               </div>
 
               {clips.length > 0 ? (
@@ -406,11 +443,11 @@ export default function App() {
                 <h3 className="text-lg font-semibold text-blue-400">1. Installation</h3>
                 <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
                   <p className="text-sm text-zinc-300 leading-relaxed mb-4">
-                    Before running the script, ensure you have Python 3.9+ and FFMPEG installed on your machine.
-                    Install the required dependencies using pip:
+                    Before running the script, ensure you have Node.js and FFMPEG installed on your machine.
+                    The platform automatically handles dependencies when you run the project.
                   </p>
                   <pre className="bg-black p-4 rounded-xl text-xs font-mono text-emerald-500 overflow-x-auto">
-                    pip install google-genai yt-dlp aiohttp asyncio
+                    npm install
                   </pre>
                 </div>
               </section>
@@ -438,7 +475,7 @@ export default function App() {
                     Run the factory from the root directory of this project. It will read <code className="text-blue-400">feed.txt</code> and begin the pipeline.
                   </p>
                   <pre className="bg-black p-4 rounded-xl text-xs font-mono text-blue-500 overflow-x-auto">
-                    python clip_factory.py
+                    npx tsx clip_factory.ts
                   </pre>
                 </div>
               </section>

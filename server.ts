@@ -4,6 +4,7 @@ import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import { spawn } from "child_process";
+import archiver from "archiver";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -84,9 +85,14 @@ async function startServer() {
       // Nah, let python log in append mode as usual. But we can empty it so the UI is fresh.
       fs.writeFile("pipeline.log", "--- Pipeline Started ---\n", "utf-8").catch(() => {});
 
-      runningProcess = spawn("python", ["clip_factory.py"]);
+      runningProcess = spawn("npx", ["tsx", "clip_factory.ts"]);
 
-      runningProcess.on("close", (code) => {
+      runningProcess.on("error", (err: Error) => {
+        fs.appendFile("pipeline.log", `\n--- Pipeline Failed to Start: ${err.message}. ---\n`, "utf-8").catch(() => {});
+        runningProcess = null;
+      });
+
+      runningProcess.on("close", (code: number | null) => {
         fs.appendFile("pipeline.log", `\n--- Pipeline Finished with code ${code} ---\n`, "utf-8").catch(() => {});
         runningProcess = null;
       });
@@ -100,6 +106,26 @@ async function startServer() {
 
   // Serve static clips
   app.use("/clips", express.static(path.join(process.cwd(), "clips")));
+
+  app.get("/api/download-all", async (req, res) => {
+    const clipsDir = path.join(process.cwd(), "clips");
+    try {
+      await fs.access(clipsDir);
+    } catch {
+      return res.status(404).json({ error: "Clips directory not found" });
+    }
+
+    res.attachment("clips.zip");
+    const archive = archiver("zip", { zlib: { level: 9 } });
+
+    archive.on("error", (err) => {
+      res.status(500).send({ error: err.message });
+    });
+
+    archive.pipe(res);
+    archive.directory(clipsDir, false);
+    archive.finalize();
+  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
