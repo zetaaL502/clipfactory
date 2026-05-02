@@ -12,7 +12,7 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = parseInt(process.env.PORT || '5000');
   const CLIPS_DIR = 'clips';
   const CONFIG_FILE = 'config.json';
   const FEED_FILE = 'feed.txt';
