@@ -25,7 +25,7 @@ async def get_duration(video_path):
     except Exception:
         return None
 
-async def process_video(job_dir, video_index, url):
+async def process_video(job_dir, video_index, url, clip_duration=30):
     video_dir = os.path.join(job_dir, str(video_index))
     os.makedirs(video_dir, exist_ok=True)
     thumb_dir = os.path.join(video_dir, "thumbs")
@@ -59,9 +59,9 @@ async def process_video(job_dir, video_index, url):
 
     ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
 
-    THUMB_INTERVAL = 15  # one thumbnail every 15 seconds
+    THUMB_INTERVAL = max(clip_duration, 10)  # thumbnail every clip_duration seconds (min 10s)
 
-    # Try starting at 15s; if video is shorter than 15s start from 0
+    # Try starting at THUMB_INTERVAL; if video is shorter start from 0
     start_offset = THUMB_INTERVAL if (duration and duration > THUMB_INTERVAL) else 0
     cmd = [
         ffmpeg, "-y",
@@ -109,7 +109,8 @@ async def main():
 
     write_status(os.path.join(job_dir, "status.json"), {"status": "running", "total": len(urls)})
 
-    tasks = [process_video(job_dir, i, url) for i, url in enumerate(urls)]
+    clip_duration = int(data.get("duration", 30))
+    tasks = [process_video(job_dir, i, url, clip_duration) for i, url in enumerate(urls)]
     await asyncio.gather(*tasks)
 
     write_status(os.path.join(job_dir, "status.json"), {"status": "done", "total": len(urls)})

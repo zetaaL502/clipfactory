@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ChevronRight, Download, Loader2,
-  AlertCircle, CheckCircle2, Film, Link, Clock, AtSign, X
+  AlertCircle, CheckCircle2, Film, Link, Clock, AtSign, X, Play
 } from 'lucide-react';
 
 interface Thumbnail {
@@ -58,6 +58,8 @@ export default function Picker() {
   const [thumbVisible, setThumbVisible] = useState<Record<number, number>>({});
   const [selections, setSelections] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [preview, setPreview] = useState<{ videoIndex: number; timestamp: number } | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -284,30 +286,40 @@ export default function Picker() {
                         {visible.map(thumb => {
                           const selected = isSelected(video.index, thumb.timestamp);
                           return (
-                            <motion.button
-                              key={thumb.file}
-                              onClick={() => toggleSelection(video.index, thumb.timestamp)}
-                              whileHover={{ scale: 1.02 }}
-                              whileTap={{ scale: 0.98 }}
-                              className={`relative rounded-xl overflow-hidden border-2 transition-all group
-                                ${selected ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-zinc-700 hover:border-zinc-500'}`}
-                            >
-                              <img
-                                src={`/api/picker/thumb/${jobId}/${video.index}/${thumb.file}`}
-                                alt={`t=${thumb.label}`}
-                                className="w-full aspect-video object-cover"
-                                loading="lazy"
-                              />
-                              {selected && (
-                                <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
-                                  <CheckCircle2 className="w-6 h-6 text-blue-300 drop-shadow" />
+                            <div key={thumb.file} className="relative group">
+                              {/* Thumbnail image — click = toggle select */}
+                              <motion.button
+                                onClick={() => toggleSelection(video.index, thumb.timestamp)}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                className={`relative w-full rounded-xl overflow-hidden border-2 transition-all block
+                                  ${selected ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-zinc-700 hover:border-zinc-500'}`}
+                              >
+                                <img
+                                  src={`/api/picker/thumb/${jobId}/${video.index}/${thumb.file}`}
+                                  alt={`t=${thumb.label}`}
+                                  className="w-full aspect-video object-cover"
+                                  loading="lazy"
+                                />
+                                {selected && (
+                                  <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
+                                    <CheckCircle2 className="w-6 h-6 text-blue-300 drop-shadow" />
+                                  </div>
+                                )}
+                                <div className={`absolute bottom-0 inset-x-0 py-1 text-center text-[11px] font-mono font-semibold
+                                  ${selected ? 'bg-blue-600/80 text-white' : 'bg-black/60 text-zinc-300'}`}>
+                                  {thumb.label}
                                 </div>
-                              )}
-                              <div className={`absolute bottom-0 inset-x-0 py-1 text-center text-[11px] font-mono font-semibold
-                                ${selected ? 'bg-blue-600/80 text-white' : 'bg-black/60 text-zinc-300'}`}>
-                                {thumb.label}
-                              </div>
-                            </motion.button>
+                              </motion.button>
+                              {/* Play preview button — appears on hover */}
+                              <button
+                                onClick={() => setPreview({ videoIndex: video.index, timestamp: thumb.timestamp })}
+                                className="absolute top-1.5 right-1.5 w-7 h-7 bg-black/70 hover:bg-black/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                title="Preview clip"
+                              >
+                                <Play className="w-3.5 h-3.5 text-white fill-white" />
+                              </button>
+                            </div>
                           );
                         })}
                         {/* Placeholder slots */}
@@ -388,6 +400,67 @@ export default function Picker() {
           <p className="text-sm">Paste video URLs above and click Fetch Thumbnails to get started.</p>
         </div>
       )}
+
+      {/* Video Preview Modal */}
+      <AnimatePresence>
+        {preview && jobId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => setPreview(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              className="bg-zinc-900 border border-zinc-700 rounded-2xl overflow-hidden shadow-2xl max-w-2xl w-full"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+                <span className="text-sm font-medium text-zinc-300">
+                  Preview — {Math.floor(preview.timestamp / 60)}:{String(preview.timestamp % 60).padStart(2, '0')}
+                  <span className="text-zinc-600 ml-2 font-normal">({duration}s clip)</span>
+                </span>
+                <button
+                  onClick={() => setPreview(null)}
+                  className="text-zinc-500 hover:text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <video
+                ref={videoRef}
+                key={`${preview.videoIndex}-${preview.timestamp}`}
+                src={`/api/picker/video/${jobId}/${preview.videoIndex}`}
+                controls
+                autoPlay
+                className="w-full bg-black"
+                onLoadedMetadata={e => {
+                  (e.target as HTMLVideoElement).currentTime = preview.timestamp;
+                }}
+              />
+              <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800">
+                <p className="text-xs text-zinc-500">This is a low-quality preview. Downloaded clip will be full quality.</p>
+                <button
+                  onClick={() => {
+                    toggleSelection(preview.videoIndex, preview.timestamp);
+                    setPreview(null);
+                  }}
+                  className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    isSelected(preview.videoIndex, preview.timestamp)
+                      ? 'bg-blue-600/20 text-blue-400 hover:bg-red-600/20 hover:text-red-400'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white'
+                  }`}
+                >
+                  {isSelected(preview.videoIndex, preview.timestamp) ? 'Deselect' : '+ Select this clip'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

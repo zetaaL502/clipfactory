@@ -243,6 +243,35 @@ asyncio.run(main())
     res.json({ ...jobStatus, videos });
   });
 
+  // Serve the downloaded preview video for inline playback
+  app.get('/api/picker/video/:jobId/:videoIndex', (req, res) => {
+    const { jobId, videoIndex } = req.params;
+    const videoPath = path.join(
+      PICKER_DIR,
+      path.basename(jobId),
+      path.basename(videoIndex),
+      'video.mp4'
+    );
+    if (!fs.existsSync(videoPath)) return res.status(404).send('not found');
+    const stat = fs.statSync(videoPath);
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': end - start + 1,
+        'Content-Type': 'video/mp4',
+      });
+      fs.createReadStream(videoPath, { start, end }).pipe(res);
+    } else {
+      res.writeHead(200, { 'Content-Length': stat.size, 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes' });
+      fs.createReadStream(videoPath).pipe(res);
+    }
+  });
+
   app.get('/api/picker/thumb/:jobId/:videoIndex/:filename', (req, res) => {
     const { jobId, videoIndex, filename } = req.params;
     const thumbPath = path.join(
