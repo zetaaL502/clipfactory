@@ -20,6 +20,9 @@ export default defineConfig(({mode}) => {
       host: '0.0.0.0',
       allowedHosts: true,
       hmr: process.env.DISABLE_HMR !== 'true',
+      watch: {
+        ignored: ['**/.local/**', '**/picker_jobs/**', '**/clips/**', '**/node_modules/**'],
+      },
     },
   };
 });
