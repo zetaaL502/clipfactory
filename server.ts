@@ -11,6 +11,22 @@ import { randomUUID } from 'crypto';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ── Auto-cleanup: delete files/dirs older than maxAgeMs ──────────────
+function cleanupOldEntries(dir: string, maxAgeMs: number) {
+  if (!fs.existsSync(dir)) return;
+  const now = Date.now();
+  for (const entry of fs.readdirSync(dir)) {
+    const full = path.join(dir, entry);
+    try {
+      const stat = fs.statSync(full);
+      if (now - stat.mtimeMs > maxAgeMs) {
+        fs.rmSync(full, { recursive: true, force: true });
+        console.log(`[cleanup] deleted old entry: ${full}`);
+      }
+    } catch {}
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = parseInt(process.env.PORT || '5000');
@@ -20,11 +36,22 @@ async function startServer() {
   const LOG_FILE = 'pipeline.log';
   const DIST_DIR = 'dist';
   const PICKER_DIR = 'picker_jobs';
+  const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
   app.use(express.json());
 
   // Clear log on every server start so refresh = fresh slate
   fs.writeFileSync(LOG_FILE, '');
+
+  // Run cleanup now and then every hour
+  setTimeout(() => {
+    cleanupOldEntries(PICKER_DIR, MAX_AGE_MS);
+    cleanupOldEntries(CLIPS_DIR, MAX_AGE_MS);
+  }, 5000);
+  setInterval(() => {
+    cleanupOldEntries(PICKER_DIR, MAX_AGE_MS);
+    cleanupOldEntries(CLIPS_DIR, MAX_AGE_MS);
+  }, 60 * 60 * 1000);
 
   // API Routes
   app.get('/api/pipeline-status', (req, res) => {
@@ -329,6 +356,10 @@ asyncio.run(main())
     for (const c of extractedPaths) {
       archive.file(c.filePath, { name: c.name });
     }
+    // Delete job temp folder after ZIP is fully sent
+    archive.on('end', () => {
+      try { fs.rmSync(jobDir, { recursive: true, force: true }); } catch {}
+    });
     archive.finalize();
   });
   // ── End Picker Routes ──────────────────────────────────────────────
