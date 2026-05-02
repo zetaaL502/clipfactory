@@ -115,12 +115,14 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None):
             raise Exception(f"yt-dlp returned no URL. stderr: {stderr.decode()[:300]}")
 
         # Build video filter chain — add drawtext if credit is provided
+        FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
         vf_parts = []
         if credit:
             escaped = escape_drawtext(credit)
             vf_parts.append(
-                f"drawtext=text='{escaped}':fontsize=14:fontcolor=white"
-                f":borderw=2:bordercolor=black:x=10:y=h-th-10"
+                f"drawtext=fontfile='{FONT_PATH}':text='{escaped}'"
+                f":fontsize=14:fontcolor=white:borderw=2:bordercolor=black"
+                f":x=10:y=h-th-10"
             )
         vf = ",".join(vf_parts) if vf_parts else None
 
