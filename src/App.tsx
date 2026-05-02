@@ -403,27 +403,36 @@ export default function App() {
                 <textarea
                   value={feed}
                   onChange={(e) => setFeed(e.target.value)}
-                  placeholder="URL | duration | start_time | @credit (optional)"
+                  placeholder="URL | duration | start_time (optional) | @credit (optional)"
                   className="relative w-full h-[60vh] bg-zinc-900 border border-zinc-800 rounded-xl p-6 font-mono text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all resize-none shadow-inner"
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4">
+              {/* Format examples */}
+              <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 font-mono text-xs space-y-1.5 text-zinc-400">
+                <p><span className="text-zinc-600">{'#'} one clip at 2:30</span></p>
+                <p>https://youtube.com/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">8sec</span> <span className="text-zinc-600">|</span> <span className="text-blue-400">2:30</span> <span className="text-zinc-600">|</span> <span className="text-amber-400">@BBC</span></p>
+                <p className="pt-1"><span className="text-zinc-600">{'#'} chunk entire video into 2-min clips</span></p>
+                <p>https://youtube.com/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">2min</span> <span className="text-zinc-600">|</span> <span className="text-amber-400">@CNN</span></p>
+                <p className="pt-1"><span className="text-zinc-600">{'#'} chunk with no watermark</span></p>
+                <p>https://archive.org/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">30sec</span></p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
                   <h3 className="text-zinc-300 font-semibold text-sm mb-2">Video URL</h3>
-                  <p className="text-zinc-500 text-xs">YouTube, Internet Archive, and thousands of other sites.</p>
+                  <p className="text-zinc-500 text-xs">YouTube, Internet Archive, Vimeo, and thousands of other sites.</p>
                 </div>
                 <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
                   <h3 className="text-zinc-300 font-semibold text-sm mb-2">Duration</h3>
-                  <p className="text-zinc-500 text-xs">Clip length in seconds (e.g., <span className="text-zinc-400 font-mono">8</span>, <span className="text-zinc-400 font-mono">15</span>).</p>
+                  <p className="text-zinc-500 text-xs">Supports <span className="text-zinc-400 font-mono">8sec</span>, <span className="text-zinc-400 font-mono">2min</span>, <span className="text-zinc-400 font-mono">1min30sec</span>, or plain <span className="text-zinc-400 font-mono">90</span>.</p>
                 </div>
                 <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
-                  <h3 className="text-zinc-300 font-semibold text-sm mb-2">Start Time</h3>
-                  <p className="text-zinc-500 text-xs">Where to cut from — e.g. <span className="text-zinc-400 font-mono">1:30</span> or <span className="text-zinc-400 font-mono">0:04:22</span> or plain seconds like <span className="text-zinc-400 font-mono">90</span>.</p>
+                  <h3 className="text-zinc-300 font-semibold text-sm mb-2">Start Time <span className="text-zinc-600 font-normal">(optional)</span></h3>
+                  <p className="text-zinc-500 text-xs">Omit to <span className="text-white">chunk the whole video</span>. Or specify <span className="text-zinc-400 font-mono">1:30</span>, <span className="text-zinc-400 font-mono">0:04:22</span>, or <span className="text-zinc-400 font-mono">90</span>.</p>
                 </div>
                 <div className="bg-zinc-900/50 border border-blue-500/20 p-4 rounded-xl">
-                  <h3 className="text-zinc-300 font-semibold text-sm mb-2">Credit <span className="text-zinc-600 font-normal">(optional)</span></h3>
-                  <p className="text-zinc-500 text-xs">Text burned into the bottom-left corner — e.g. <span className="text-zinc-400 font-mono">@yourchannel</span></p>
+                  <h3 className="text-zinc-300 font-semibold text-sm mb-2">@Credit <span className="text-zinc-600 font-normal">(optional)</span></h3>
+                  <p className="text-zinc-500 text-xs">Burned into the bottom-left of every clip. Works in any field position.</p>
                 </div>
               </div>
             </motion.div>

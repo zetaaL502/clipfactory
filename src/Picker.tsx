@@ -49,7 +49,7 @@ function shortUrl(url: string) {
 
 export default function Picker() {
   const [urls, setUrls] = useState('');
-  const [duration, setDuration] = useState('10');
+  const [duration, setDuration] = useState('30');
   const [credit, setCredit] = useState('');
   const [jobId, setJobId] = useState<string | null>(null);
   const [videos, setVideos] = useState<VideoData[]>([]);
@@ -190,15 +190,20 @@ export default function Picker() {
         <div className="flex gap-4 flex-wrap">
           <div className="space-y-1.5">
             <label className="flex items-center gap-2 text-sm font-medium text-zinc-300">
-              <Clock className="w-3.5 h-3.5 text-zinc-500" /> Clip Duration (seconds)
+              <Clock className="w-3.5 h-3.5 text-zinc-500" /> Clip Duration
             </label>
-            <input
-              type="number"
-              min={1} max={120}
+            <select
               value={duration}
               onChange={e => setDuration(e.target.value)}
-              className="w-32 bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none text-zinc-200"
-            />
+              className="w-36 bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none text-zinc-200"
+            >
+              <option value="15">15 sec</option>
+              <option value="30">30 sec</option>
+              <option value="60">1 min</option>
+              <option value="120">2 min</option>
+              <option value="300">5 min</option>
+              <option value="600">10 min</option>
+            </select>
           </div>
           <div className="space-y-1.5 flex-1 min-w-48">
             <label className="flex items-center gap-2 text-sm font-medium text-zinc-300">

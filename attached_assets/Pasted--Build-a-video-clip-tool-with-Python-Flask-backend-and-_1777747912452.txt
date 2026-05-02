@@ -1,0 +1,61 @@
+**"Build a video clip tool with Python Flask backend and HTML frontend. Here is exactly how it works:**
+
+**TWO SECTIONS:**
+
+**SECTION 1 — Smart Batch Input:**
+A large textarea where user pastes multiple lines. Each line follows this format:
+VIDEO_URL | DURATION | START_TIME(optional) | @CREDIT(optional)
+
+Examples:
+- https://youtube.com/xxx | 2min | @CNN → cuts entire video into 2 minute chunks, burns @CNN bottom left all clips
+- https://youtube.com/xxx | 8sec | 2:30 | @BBC → cuts 8 seconds starting from 2 minutes 30 seconds, burns @BBC bottom left
+- https://youtube.com/xxx | 1min → cuts entire video into 1 minute chunks, no watermark
+- https://archive.org/xxx | 30sec | 5:00 | @RT → cuts 30 seconds from 5:00 mark
+
+Parse each line by splitting on | character.
+Field 1 = video URL
+Field 2 = duration (supports sec, min formats)
+Field 3 = optional start timestamp in MM:SS or HH:MM:SS format
+Field 4 = optional @credit text
+
+Logic:
+- If START_TIME provided → cut ONE clip starting from that timestamp for that duration
+- If NO START_TIME provided → cut ENTIRE video into chunks of that duration from beginning to end, download all chunks
+- If @credit provided → burn text onto bottom left corner of every clip using FFmpeg drawtext, white text size 14, black outline, 10px padding
+- If no @credit → no watermark
+
+**SECTION 2 — Thumbnail Browser:**
+- Separate input field for one video URL at a time
+- A @credit field that applies to all clips downloaded in this session
+- When user submits URL, download video using yt-dlp at lowest quality
+- Use FFmpeg to extract one thumbnail every 30 seconds
+- Display thumbnails in grid of 4, showing timestamp below each
+- NEXT 4 button shows next 4 thumbnails from same video
+- PREVIOUS 4 button goes back
+- Click thumbnail to select it — highlights with red border
+- Duration selector dropdown: 15sec, 30sec, 1min, 2min, 5min, 10min
+- DOWNLOAD CLIP button cuts selected timestamp for selected duration
+- If @credit filled — burn onto clip
+- Can select multiple thumbnails and download all as ZIP
+
+**DOWNLOADING:**
+- Use yt-dlp for ALL sources — YouTube, Internet Archive, Vimeo, any direct URL
+- Use FFmpeg for all cutting, thumbnail extraction, and watermark burning
+- Show progress bar for each video being processed
+- Show status messages: Downloading, Extracting thumbnails, Cutting clip, Done
+- All finished clips download as ZIP file
+
+**TECH STACK:**
+- Python Flask backend
+- yt-dlp for downloading
+- FFmpeg for everything else
+- Plain HTML CSS JavaScript frontend — no React
+- Dark mode UI
+- NO GEMINI, NO AI, NO EXTERNAL APIs — only yt-dlp and FFmpeg
+- Everything runs locally, no cloud services needed
+
+**IMPORTANT:**
+- Handle errors gracefully — if URL fails show error and continue to next
+- Support long videos — no timeout limits
+- Process multiple lines simultaneously with threading
+- Mobile responsive layout"**

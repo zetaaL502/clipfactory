@@ -4,16 +4,13 @@ import json
 import logging
 import re
 import shutil
-import subprocess
 from datetime import datetime
 from yt_dlp import YoutubeDL
 
-# Configuration
 TEMP_DIR = "temp_processing"
 CLIPS_DIR = "clips"
 LOG_FILE = "pipeline.log"
 
-# Ensure directories exist
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(CLIPS_DIR, exist_ok=True)
 
@@ -38,13 +35,30 @@ async def log_msg(level, message):
 def sanitize_filename(name):
     return re.sub(r'[^a-zA-Z0-9]', '_', name).lower()[:50]
 
+def parse_duration(s):
+    """Parse duration: '8sec', '2min', '1min30sec', '90', '8s', '2m' → seconds."""
+    s = s.strip().lower()
+    try:
+        return int(float(s))
+    except ValueError:
+        pass
+    total = 0
+    min_match = re.search(r'(\d+)\s*m(?:in)?', s)
+    sec_match = re.search(r'(\d+)\s*s(?:ec)?', s)
+    if min_match:
+        total += int(min_match.group(1)) * 60
+    if sec_match:
+        total += int(sec_match.group(1))
+    if total > 0:
+        return total
+    raise ValueError(f"Cannot parse duration: '{s}' — use e.g. 8, 8sec, 2min, 1min30sec")
+
 def hms_to_seconds(hms):
     """Convert HH:MM:SS or MM:SS or plain seconds to total seconds."""
     hms = hms.strip()
     if ':' not in hms:
         return int(float(hms))
-    parts = hms.split(':')
-    parts = [int(p) for p in parts]
+    parts = [int(p) for p in hms.split(':')]
     if len(parts) == 3:
         return parts[0] * 3600 + parts[1] * 60 + parts[2]
     elif len(parts) == 2:
@@ -52,15 +66,32 @@ def hms_to_seconds(hms):
     return int(parts[0])
 
 def escape_drawtext(text):
-    """Escape special characters for FFmpeg drawtext filter."""
     text = text.replace('\\', '\\\\')
     text = text.replace("'", "\\'")
     text = text.replace(':', '\\:')
     return text
 
+async def get_video_duration_url(url):
+    """Get total video duration in seconds via yt-dlp --dump-json."""
+    ytdlp_path = shutil.which("yt-dlp") or "yt-dlp"
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            ytdlp_path,
+            "--dump-json", "--no-playlist", "--no-warnings",
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            url,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        data = json.loads(stdout.decode().strip())
+        return float(data.get('duration', 0))
+    except Exception as e:
+        await log_msg("WARNING", f"Could not get video duration: {e}")
+        return 0.0
+
 async def download_4k_clip(url, start_time, duration, output_path, credit=None):
-    """Get direct stream URL via yt-dlp, then let ffmpeg seek+cut precisely.
-    Optionally burns a credit watermark into the bottom-left corner."""
+    """Fetch stream URL via yt-dlp then cut with FFmpeg. Optionally burn credit watermark."""
     ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
     ytdlp_path = shutil.which("yt-dlp") or "yt-dlp"
 
@@ -80,7 +111,6 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None):
         if not urls:
             raise Exception(f"yt-dlp returned no URL. stderr: {stderr.decode()[:300]}")
 
-        # Build video filter chain — add drawtext if credit is provided
         FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
         vf_parts = []
         if credit:
@@ -103,103 +133,120 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None):
             ]
             if vf:
                 cmd += ["-vf", vf]
-            cmd += [
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                "-c:a", "aac", "-b:a", "128k",
-                "-movflags", "+faststart",
-                output_path,
-            ]
+            cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                    "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output_path]
         else:
             video_url = urls[0]
-            cmd = [
-                ffmpeg_path, "-y",
-                "-ss", str(int(start_time)), "-i", video_url,
-                "-t", str(duration),
-            ]
+            cmd = [ffmpeg_path, "-y", "-ss", str(int(start_time)), "-i", video_url, "-t", str(duration)]
             if vf:
                 cmd += ["-vf", vf]
-            cmd += [
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                "-c:a", "aac", "-b:a", "128k",
-                "-movflags", "+faststart",
-                output_path,
-            ]
+            cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                    "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output_path]
 
         ffproc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         _, ff_err = await ffproc.communicate()
 
         if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
             return True
         else:
-            await log_msg("WARNING", f"ffmpeg produced empty/corrupt file for {output_path}. stderr: {ff_err.decode()[-300:]}")
+            await log_msg("WARNING", f"FFmpeg produced empty file: {ff_err.decode()[-300:]}")
             if os.path.exists(output_path):
                 os.remove(output_path)
             return False
 
     except Exception as e:
-        await log_msg("ERROR", f"Clip extraction failed for {url} at {start_time}s: {str(e)}")
+        await log_msg("ERROR", f"Clip extraction failed for {url} at {start_time}s: {e}")
         if os.path.exists(output_path):
             os.remove(output_path)
         return False
 
 
-async def process_url_line(line_num, url, duration, start_time, credit=None):
-    """
-    Process one feed line — extract a single clip from url at start_time.
-    Format: URL | duration | start_time | @credit (optional)
-    """
-    label = f"Line {line_num}"
+async def process_single(line_num, url, duration, start_time, credit=None):
+    """Cut one clip at a specific start_time."""
     credit_info = f" | credit: {credit}" if credit else ""
-    await log_msg("INFO", f"=== [{label}] Starting: {url} | {duration}s from {start_time}s{credit_info} ===")
-
+    await log_msg("INFO", f"=== [Line {line_num}] {url} | {duration}s from {start_time}s{credit_info} ===")
     out = os.path.join(CLIPS_DIR, f"clip_s{line_num}.mp4")
-    credit_log = f" (with credit: {credit})" if credit else ""
-    await log_msg("INFO", f"[{label}] Extracting clip at {start_time}s → {out}{credit_log}")
-
     ok = await download_4k_clip(url, start_time, duration, out, credit=credit)
     if ok:
-        await log_msg("INFO", f"[{label}] Done — saved to {out}")
+        await log_msg("INFO", f"[Line {line_num}] Done → {out}")
     else:
-        await log_msg("ERROR", f"[{label}] Extraction failed. Source may be geo-blocked — try Internet Archive.")
+        await log_msg("ERROR", f"[Line {line_num}] Failed. Try Internet Archive if YouTube is blocked.")
+    await log_msg("INFO", f"=== [Line {line_num}] Finished ===")
 
-    await log_msg("INFO", f"=== [{label}] Finished ===")
+
+async def process_chunked(line_num, url, duration, credit=None):
+    """Cut entire video into equal-duration chunks from start to finish."""
+    credit_info = f" | credit: {credit}" if credit else ""
+    await log_msg("INFO", f"=== [Line {line_num}] CHUNK MODE: {url} | {duration}s chunks{credit_info} ===")
+
+    total = await get_video_duration_url(url)
+    if not total:
+        await log_msg("ERROR", f"[Line {line_num}] Could not get video duration — skipping chunk mode.")
+        return
+
+    num_chunks = int(total // duration)
+    if num_chunks == 0:
+        await log_msg("WARNING", f"[Line {line_num}] Video ({total:.0f}s) shorter than chunk size ({duration}s) — cutting one clip.")
+        num_chunks = 1
+
+    await log_msg("INFO", f"[Line {line_num}] Video is {total:.0f}s — cutting {num_chunks} chunk(s) of {duration}s")
+
+    succeeded = 0
+    for i in range(num_chunks):
+        ts = i * duration
+        out = os.path.join(CLIPS_DIR, f"clip_s{line_num}_chunk{i+1:03d}.mp4")
+        await log_msg("INFO", f"[Line {line_num}] Chunk {i+1}/{num_chunks} at {ts}s → {out}")
+        ok = await download_4k_clip(url, ts, duration, out, credit=credit)
+        if ok:
+            succeeded += 1
+        else:
+            await log_msg("WARNING", f"[Line {line_num}] Chunk {i+1} failed — skipping.")
+
+    await log_msg("INFO", f"=== [Line {line_num}] Done: {succeeded}/{num_chunks} chunks saved ===")
 
 
 async def run_factory(feed_text):
     setup_logger()
     await log_msg("INFO", f"--- Pipeline Started at {datetime.now()} ---")
 
-    lines = [l.strip() for l in feed_text.strip().split('\n') if l.strip()]
+    lines = [l.strip() for l in feed_text.strip().split('\n') if l.strip() and not l.strip().startswith('#')]
 
     for line_num, line in enumerate(lines, start=1):
-        # Format: URL | duration | start_time | @credit (optional)
         parts = [p.strip() for p in line.split('|')]
-        if len(parts) < 3:
-            await log_msg("WARNING", f"Skipping malformed line {line_num}: '{line}' — need URL | duration | start_time")
+        if len(parts) < 2:
+            await log_msg("WARNING", f"Skipping line {line_num}: '{line}' — need at least URL | duration")
             continue
 
         url = parts[0]
         dur_str = parts[1]
-        start_str = parts[2]
-        credit = parts[3] if len(parts) >= 4 and parts[3] else None
 
         try:
-            duration = int(dur_str)
-        except ValueError:
-            await log_msg("ERROR", f"Invalid duration '{dur_str}' on line {line_num} — skipping.")
+            duration = parse_duration(dur_str)
+        except ValueError as e:
+            await log_msg("ERROR", f"Line {line_num}: {e} — skipping.")
             continue
 
-        try:
-            start_time = hms_to_seconds(start_str)
-        except (ValueError, IndexError):
-            await log_msg("ERROR", f"Invalid start time '{start_str}' on line {line_num} — use HH:MM:SS or seconds.")
-            continue
+        # Smart field detection for remaining parts
+        # Field 3 can be: @credit (chunk mode) OR start_time (single clip)
+        # Field 4 can be: @credit (when field 3 was start_time)
+        credit = None
+        start_time = None
 
-        await process_url_line(line_num, url, duration, start_time, credit=credit)
+        remaining = [p for p in parts[2:] if p]
+        for field in remaining:
+            if field.startswith('@'):
+                credit = field
+            else:
+                try:
+                    start_time = hms_to_seconds(field)
+                except (ValueError, IndexError):
+                    await log_msg("WARNING", f"Line {line_num}: Could not parse '{field}' as timestamp — ignoring.")
+
+        if start_time is not None:
+            await process_single(line_num, url, duration, start_time, credit=credit)
+        else:
+            await process_chunked(line_num, url, duration, credit=credit)
 
     await log_msg("INFO", "--- Batch processing complete ---")
     await log_msg("INFO", f"--- Pipeline Finished at {datetime.now()} ---")
