@@ -19,7 +19,7 @@ export default defineConfig(({mode}) => {
       port: 5000,
       host: '0.0.0.0',
       allowedHosts: true,
-      hmr: process.env.DISABLE_HMR !== 'true',
+      hmr: process.env.DISABLE_HMR === 'true' ? false : { clientPort: 443 },
       watch: {
         ignored: ['**/.local/**', '**/picker_jobs/**', '**/clips/**', '**/node_modules/**'],
       },
