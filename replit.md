@@ -23,7 +23,10 @@ A web app for batch-extracting AI-curated video clips from YouTube and other sou
 
 ## Key Files
 
-- `server.ts` — Express server with API routes and Vite dev middleware
+- `server.ts` — Express server with API routes (clip factory + picker) and Vite dev middleware
+- `picker.py` — Picker backend: downloads videos concurrently, extracts thumbnails every 30s
+- `picker_extract.py` — Single clip extractor used by the Picker download flow
+- `src/Picker.tsx` — Manual Clip Picker React component
 - `vite.config.ts` — Vite config (port 5000, allowedHosts: true for Replit proxy)
 - `src/App.tsx` — Main React UI with tabs: Feed, Logs, Clips, Settings, Guide
 - `clip_factory.py` — Python pipeline: download → analyze → extract

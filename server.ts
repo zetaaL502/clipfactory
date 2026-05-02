@@ -6,6 +6,7 @@ import path from 'path';
 import archiver from 'archiver';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +19,7 @@ async function startServer() {
   const FEED_FILE = 'feed.txt';
   const LOG_FILE = 'pipeline.log';
   const DIST_DIR = 'dist';
+  const PICKER_DIR = 'picker_jobs';
 
   app.use(express.json());
 
@@ -194,6 +196,124 @@ asyncio.run(main())
   if (!fs.existsSync(CLIPS_DIR)) {
     fs.mkdirSync(CLIPS_DIR, { recursive: true });
   }
+  if (!fs.existsSync(PICKER_DIR)) {
+    fs.mkdirSync(PICKER_DIR, { recursive: true });
+  }
+
+  // ── Picker Routes ─────────────────────────────────────────────────
+  app.post('/api/picker/start', (req, res) => {
+    const { urls, duration, credit } = req.body;
+    if (!urls || !Array.isArray(urls) || urls.length === 0) {
+      return res.status(400).json({ error: 'No URLs provided' });
+    }
+    const jobId = randomUUID();
+    const jobDir = path.join(PICKER_DIR, jobId);
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'urls.json'), JSON.stringify({ urls, duration, credit }));
+
+    const proc = spawn('python3', ['picker.py', jobDir]);
+    proc.stdout.on('data', d => console.log('[picker]', d.toString()));
+    proc.stderr.on('data', d => console.error('[picker]', d.toString()));
+
+    res.json({ jobId });
+  });
+
+  app.get('/api/picker/job/:jobId', (req, res) => {
+    const jobDir = path.join(PICKER_DIR, path.basename(req.params.jobId));
+    const statusPath = path.join(jobDir, 'status.json');
+    if (!fs.existsSync(statusPath)) return res.status(404).json({ error: 'Job not found' });
+
+    const jobStatus = JSON.parse(fs.readFileSync(statusPath, 'utf-8'));
+    const videos = [];
+
+    for (let i = 0; i < jobStatus.total; i++) {
+      const videoDir = path.join(jobDir, String(i));
+      const videoStatusPath = path.join(videoDir, 'status.json');
+      if (!fs.existsSync(videoStatusPath)) {
+        videos.push({ index: i, status: 'queued', thumbnails: [] });
+        continue;
+      }
+      const videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8'));
+
+      // Scan thumb dir for files already written (shows progress during extraction)
+      const thumbDir = path.join(videoDir, 'thumbs');
+      let thumbnails: { file: string; timestamp: number; label: string }[] = [];
+      if (fs.existsSync(thumbDir)) {
+        const files = fs.readdirSync(thumbDir).filter(f => f.endsWith('.jpg')).sort();
+        const startOffset = videoStatus.thumbStartOffset ?? 30;
+        thumbnails = files.map((f, idx) => {
+          const ts = startOffset + idx * 30;
+          const m = Math.floor(ts / 60), s = ts % 60;
+          return { file: f, timestamp: ts, label: `${m}:${s.toString().padStart(2, '0')}` };
+        });
+      }
+
+      videos.push({ ...videoStatus, index: i, thumbnails });
+    }
+
+    res.json({ ...jobStatus, videos });
+  });
+
+  app.get('/api/picker/thumb/:jobId/:videoIndex/:filename', (req, res) => {
+    const { jobId, videoIndex, filename } = req.params;
+    const thumbPath = path.join(
+      PICKER_DIR,
+      path.basename(jobId),
+      path.basename(videoIndex),
+      'thumbs',
+      path.basename(filename)
+    );
+    if (!fs.existsSync(thumbPath)) return res.status(404).send('not found');
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.sendFile(path.resolve(thumbPath));
+  });
+
+  app.post('/api/picker/extract-zip', async (req, res) => {
+    const { jobId, selections, duration, credit } = req.body;
+    if (!jobId || !Array.isArray(selections) || selections.length === 0) {
+      return res.status(400).json({ error: 'Invalid request' });
+    }
+    const jobDir = path.join(PICKER_DIR, path.basename(jobId));
+    const clipsDir = path.join(jobDir, 'clips');
+    fs.mkdirSync(clipsDir, { recursive: true });
+
+    const extractedPaths: { filePath: string; name: string }[] = [];
+
+    for (const sel of selections) {
+      const videoStatusPath = path.join(jobDir, String(sel.videoIndex), 'status.json');
+      if (!fs.existsSync(videoStatusPath)) continue;
+      const videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8'));
+      const url = videoStatus.url;
+      if (!url) continue;
+
+      const clipName = `clip_v${sel.videoIndex}_t${sel.timestamp}.mp4`;
+      const clipPath = path.join(clipsDir, clipName);
+
+      await new Promise<void>(resolve => {
+        const args = ['picker_extract.py', url, String(sel.timestamp), String(duration || 10), clipPath];
+        if (credit) args.push(credit);
+        const proc = spawn('python3', args);
+        proc.stdout.on('data', d => console.log('[extract]', d.toString()));
+        proc.stderr.on('data', d => console.error('[extract]', d.toString()));
+        proc.on('close', () => resolve());
+      });
+
+      if (fs.existsSync(clipPath)) {
+        extractedPaths.push({ filePath: clipPath, name: clipName });
+      }
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename=picker_clips.zip');
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.pipe(res);
+    for (const c of extractedPaths) {
+      archive.file(c.filePath, { name: c.name });
+    }
+    archive.finalize();
+  });
+  // ── End Picker Routes ──────────────────────────────────────────────
 
   app.use('/clips', express.static(CLIPS_DIR, {
       setHeaders: (res, p) => {

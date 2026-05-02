@@ -14,9 +14,11 @@ import {
   Power,
   Trash2,
   X,
-  Clock
+  Clock,
+  MousePointer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import Picker from './Picker';
 
 function ClipCard({ clip, index, selected, onToggle }: {
   clip: string;
@@ -147,7 +149,7 @@ export default function App() {
   const [selectedClips, setSelectedClips] = useState<Set<string>>(new Set());
   const [apiKey, setApiKey] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'feed' | 'logs' | 'clips' | 'settings' | 'help'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'logs' | 'clips' | 'settings' | 'help' | 'picker'>('feed');
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
@@ -361,6 +363,7 @@ export default function App() {
           <div className="flex items-center gap-1 bg-zinc-800 p-1 rounded-xl overflow-x-auto custom-scrollbar">
             {[
               { id: 'feed', icon: FileText, label: 'Feed' },
+              { id: 'picker', icon: MousePointer, label: 'Picker' },
               { id: 'logs', icon: Terminal, label: 'Logs' },
               { id: 'clips', icon: CheckCircle2, label: 'Clips' },
               { id: 'settings', icon: Settings, label: 'Settings' },
@@ -457,6 +460,17 @@ export default function App() {
                   <p className="text-zinc-500 text-xs">Text burned into the bottom-left corner of every clip — e.g. <span className="text-zinc-400 font-mono">@yourchannel</span></p>
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'picker' && (
+            <motion.div
+              key="picker"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              <Picker />
             </motion.div>
           )}
 
