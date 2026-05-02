@@ -55,6 +55,7 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
 
     # Download — prefer mp4 format so browser can play it inline
     # Falls back progressively: small mp4 → any mp4 → small anything → anything
+    cookies_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
     ydl_opts = {
         'format': (
             'best[height<=360][ext=mp4]'
@@ -76,6 +77,8 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
         'fragment_retries': 5,
         'socket_timeout': 30,
     }
+    if os.path.exists(cookies_file):
+        ydl_opts['cookiefile'] = cookies_file
 
     try:
         with YoutubeDL(ydl_opts) as ydl:

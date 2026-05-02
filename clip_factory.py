@@ -71,6 +71,11 @@ def escape_drawtext(text):
     text = text.replace(':', '\\:')
     return text
 
+def _cookies_args():
+    """Return ['--cookies', 'cookies.txt'] if the file exists, else []."""
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
+    return ['--cookies', p] if os.path.exists(p) else []
+
 async def get_video_duration_url(url):
     """Get total video duration in seconds via yt-dlp --dump-json."""
     ytdlp_path = shutil.which("yt-dlp") or "yt-dlp"
@@ -79,6 +84,7 @@ async def get_video_duration_url(url):
             ytdlp_path,
             "--dump-json", "--no-playlist", "--no-warnings",
             "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            *_cookies_args(),
             url,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -101,6 +107,7 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None, 
             "-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
             "--get-url", "--no-warnings", "--no-playlist",
             "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            *_cookies_args(),
             url,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

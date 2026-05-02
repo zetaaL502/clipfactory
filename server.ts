@@ -119,6 +119,22 @@ async function startServer() {
     res.json({ status: 'ok' });
   });
 
+  const COOKIES_FILE = 'cookies.txt';
+
+  app.get('/api/cookies', (req, res) => {
+    res.json({ exists: fs.existsSync(COOKIES_FILE) });
+  });
+
+  app.post('/api/cookies', (req, res) => {
+    const { content } = req.body;
+    if (!content || !content.trim()) {
+      if (fs.existsSync(COOKIES_FILE)) fs.unlinkSync(COOKIES_FILE);
+      return res.json({ status: 'cleared' });
+    }
+    fs.writeFileSync(COOKIES_FILE, content.trim() + '\n', 'utf-8');
+    res.json({ status: 'saved' });
+  });
+
   app.get('/api/settings', (req, res) => {
     if (!fs.existsSync(CONFIG_FILE)) {
       return res.json({ GOOGLE_API_KEY: '' });

@@ -100,6 +100,9 @@ function App() {
   const [logs, setLogs] = useState('');
   const [showLogs, setShowLogs] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [cookieContent, setCookieContent] = useState('');
+  const [cookiesExist, setCookiesExist] = useState(false);
+  const [cookieSaveStatus, setCookieSaveStatus] = useState<'idle'|'saved'|'cleared'>('idle');
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   const groupedClips = React.useMemo(() => {
@@ -123,6 +126,18 @@ function App() {
 
   useEffect(() => { fetchData(); const t = setInterval(fetchData, 3000); return () => clearInterval(t); }, []);
   useEffect(() => { if (showLogs) logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs, showLogs]);
+  useEffect(() => {
+    if (showSettings) fetch('/api/cookies').then(r => r.json()).then(d => setCookiesExist(d.exists)).catch(() => {});
+  }, [showSettings]);
+
+  const saveCookies = async () => {
+    const res = await fetch('/api/cookies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: cookieContent }) });
+    const d = await res.json();
+    setCookiesExist(d.status === 'saved');
+    setCookieSaveStatus(d.status === 'saved' ? 'saved' : 'cleared');
+    if (d.status !== 'saved') setCookieContent('');
+    setTimeout(() => setCookieSaveStatus('idle'), 3000);
+  };
 
   const toggleClip = (clip: string) => {
     setSelectedClips(prev => { const n = new Set(prev); n.has(clip) ? n.delete(clip) : n.add(clip); return n; });
@@ -371,12 +386,44 @@ https://archive.org/details/my-film | 30sec | 3:30+
 # Time:     90  1:30   0:04:22`}</pre>
                 </div>
 
+                {/* YouTube Cookies */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-white uppercase tracking-wider">YouTube Cookies</h4>
+                    {cookiesExist && (
+                      <span className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full px-2 py-0.5">Active</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    YouTube blocks downloads from cloud servers unless you pass cookies from a logged-in browser. Export your cookies using the <span className="text-zinc-300 font-medium">Get cookies.txt LOCALLY</span> browser extension, then paste the file contents below.
+                  </p>
+                  <textarea
+                    value={cookieContent}
+                    onChange={e => setCookieContent(e.target.value)}
+                    placeholder={"# Netscape HTTP Cookie File\n# Export from your browser using 'Get cookies.txt LOCALLY'\n\n.youtube.com\tTRUE\t/\t..."}
+                    rows={5}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl p-3 font-mono text-xs focus:ring-2 focus:ring-blue-500/50 outline-none resize-none text-zinc-300 placeholder:text-zinc-700"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button onClick={saveCookies}
+                      className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {cookieContent.trim() ? 'Save Cookies' : 'Clear Cookies'}
+                    </button>
+                    {cookieSaveStatus !== 'idle' && (
+                      <span className={`text-xs ${cookieSaveStatus === 'saved' ? 'text-emerald-400' : 'text-zinc-400'}`}>
+                        {cookieSaveStatus === 'saved' ? 'Cookies saved — YouTube downloads will now use them.' : 'Cookies cleared.'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
                 {/* Notes */}
                 <div className="space-y-3">
                   <h4 className="text-sm font-bold text-white uppercase tracking-wider">Notes</h4>
                   <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex gap-3">
                     <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-300">YouTube blocks automated downloads on cloud IPs. Use Internet Archive or run locally for YouTube.</p>
+                    <p className="text-xs text-amber-300">YouTube blocks automated downloads on cloud IPs. Paste your YouTube cookies above to work around this.</p>
                   </div>
                   <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex gap-3">
                     <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
