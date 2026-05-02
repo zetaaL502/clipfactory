@@ -7,7 +7,7 @@ import {
 import Studio from './Studio';
 
 function ClipCard({ clip, index, selected, onToggle }: {
-  clip: string; index: number; selected: boolean; onToggle: () => void;
+  key?: React.Key | null; clip: string; index: number; selected: boolean; onToggle: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -197,7 +197,7 @@ export default function App() {
               {Object.entries(groupedClips).sort((a, b) => {
                 const ia = parseInt(a[0]), ib = parseInt(b[0]);
                 return (isNaN(ia) || isNaN(ib)) ? a[0].localeCompare(b[0]) : ia - ib;
-              }).map(([key, groupClips]) => (
+              }).map(([key, groupClips]: [string, string[]]) => (
                 <div key={key} className="space-y-4">
                   <div className="flex items-center gap-3">
                     <div className="bg-purple-600/20 border border-purple-500/20 w-8 h-8 rounded-lg flex items-center justify-center font-bold text-purple-300 text-sm">

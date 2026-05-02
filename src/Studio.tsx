@@ -100,6 +100,7 @@ function ThumbCard({
   thumb, videoIndex, jobId, clipDuration,
   selected, onToggle, playing, onPlay, onStop
 }: {
+  key?: React.Key | null;
   thumb: Thumbnail; videoIndex: number; jobId: string; clipDuration: number;
   selected: boolean; onToggle: () => void;
   playing: boolean; onPlay: () => void; onStop: () => void;
@@ -276,7 +277,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
     if (!jobId || selections.size === 0) return;
     setIsExtracting(true); setPickerStatus(null);
     try {
-      const sels = Array.from(selections).map(k => { const [vi, ts] = k.split(':').map(Number); return { videoIndex: vi, timestamp: ts }; });
+      const sels = Array.from(selections).map((k: string) => { const [vi, ts] = k.split(':').map(Number); return { videoIndex: vi, timestamp: ts }; });
       const res = await fetch('/api/picker/extract-zip', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobId, selections: sels, duration: parseDurationSecs(duration), credit: credit || null })
