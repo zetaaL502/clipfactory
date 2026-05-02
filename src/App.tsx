@@ -412,10 +412,10 @@ export default function App() {
               <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 font-mono text-xs space-y-1.5 text-zinc-400">
                 <p><span className="text-zinc-600">{'#'} one clip at 2:30</span></p>
                 <p>https://youtube.com/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">8sec</span> <span className="text-zinc-600">|</span> <span className="text-blue-400">2:30</span> <span className="text-zinc-600">|</span> <span className="text-amber-400">@BBC</span></p>
-                <p className="pt-1"><span className="text-zinc-600">{'#'} chunk entire video into 2-min clips</span></p>
-                <p>https://youtube.com/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">2min</span> <span className="text-zinc-600">|</span> <span className="text-amber-400">@CNN</span></p>
-                <p className="pt-1"><span className="text-zinc-600">{'#'} chunk with no watermark</span></p>
-                <p>https://archive.org/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">30sec</span></p>
+                <p className="pt-1"><span className="text-zinc-600">{'#'} chunk everything FROM 3:30 to end  ← add + after timestamp</span></p>
+                <p>https://youtube.com/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">30sec</span> <span className="text-zinc-600">|</span> <span className="text-blue-400">3:30+</span> <span className="text-zinc-600">|</span> <span className="text-amber-400">@CNN</span></p>
+                <p className="pt-1"><span className="text-zinc-600">{'#'} chunk entire video from the beginning</span></p>
+                <p>https://archive.org/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">2min</span> <span className="text-zinc-600">|</span> <span className="text-amber-400">@RT</span></p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">

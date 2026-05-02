@@ -188,26 +188,32 @@ async def process_single(line_num, url, duration, start_time, credit=None):
     await log_msg("INFO", f"=== [Line {line_num}] Finished ===")
 
 
-async def process_chunked(line_num, url, duration, credit=None):
-    """Cut entire video into equal-duration chunks from start to finish."""
+async def process_chunked(line_num, url, duration, credit=None, start_offset=0):
+    """Cut video into equal-duration chunks from start_offset to the end."""
     credit_info = f" | credit: {credit}" if credit else ""
-    await log_msg("INFO", f"=== [Line {line_num}] CHUNK MODE: {url} | {duration}s chunks{credit_info} ===")
+    offset_info = f" from {start_offset}s" if start_offset else ""
+    await log_msg("INFO", f"=== [Line {line_num}] CHUNK MODE: {url} | {duration}s chunks{offset_info}{credit_info} ===")
 
     total = await get_video_duration_url(url)
     if not total:
         await log_msg("ERROR", f"[Line {line_num}] Could not get video duration — skipping chunk mode.")
         return
 
-    num_chunks = int(total // duration)
+    usable = total - start_offset
+    if usable <= 0:
+        await log_msg("ERROR", f"[Line {line_num}] Start offset ({start_offset}s) is beyond video length ({total:.0f}s) — skipping.")
+        return
+
+    num_chunks = int(usable // duration)
     if num_chunks == 0:
-        await log_msg("WARNING", f"[Line {line_num}] Video ({total:.0f}s) shorter than chunk size ({duration}s) — cutting one clip.")
+        await log_msg("WARNING", f"[Line {line_num}] Remaining video ({usable:.0f}s) shorter than chunk size ({duration}s) — cutting one clip.")
         num_chunks = 1
 
-    await log_msg("INFO", f"[Line {line_num}] Video is {total:.0f}s — cutting {num_chunks} chunk(s) of {duration}s")
+    await log_msg("INFO", f"[Line {line_num}] Video is {total:.0f}s, starting at {start_offset}s → {num_chunks} chunk(s) of {duration}s")
 
     succeeded = 0
     for i in range(num_chunks):
-        ts = i * duration
+        ts = start_offset + i * duration
         out = os.path.join(CLIPS_DIR, f"clip_s{line_num}_chunk{i+1:03d}.mp4")
         await log_msg("INFO", f"[Line {line_num}] Chunk {i+1}/{num_chunks} at {ts}s → {out}")
         ok = await download_4k_clip(url, ts, duration, out, credit=credit)
@@ -241,24 +247,34 @@ async def run_factory(feed_text):
             continue
 
         # Smart field detection for remaining parts
-        # Field 3 can be: @credit (chunk mode) OR start_time (single clip)
-        # Field 4 can be: @credit (when field 3 was start_time)
+        # Field 3 can be: @credit  OR  timestamp  OR  timestamp+  (chunk from that point)
+        # Field 4 can be: @credit (when field 3 was a timestamp)
         credit = None
         start_time = None
+        chunk_from_offset = False   # True when timestamp ends with '+'
 
         remaining = [p for p in parts[2:] if p]
         for field in remaining:
             if field.startswith('@'):
                 credit = field
             else:
+                raw = field
+                if raw.endswith('+'):
+                    chunk_from_offset = True
+                    raw = raw[:-1]
                 try:
-                    start_time = hms_to_seconds(field)
+                    start_time = hms_to_seconds(raw)
                 except (ValueError, IndexError):
                     await log_msg("WARNING", f"Line {line_num}: Could not parse '{field}' as timestamp — ignoring.")
 
-        if start_time is not None:
+        if start_time is not None and not chunk_from_offset:
+            # Single clip at exact timestamp
             await process_single(line_num, url, duration, start_time, credit=credit)
+        elif start_time is not None and chunk_from_offset:
+            # Chunk from timestamp to end of video
+            await process_chunked(line_num, url, duration, credit=credit, start_offset=start_time)
         else:
+            # No timestamp → chunk entire video from beginning
             await process_chunked(line_num, url, duration, credit=credit)
 
     await log_msg("INFO", "--- Batch processing complete ---")
