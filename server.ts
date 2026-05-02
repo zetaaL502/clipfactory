@@ -110,27 +110,16 @@ async function startServer() {
   });
 
   app.post('/api/run', (req, res) => {
-    // Actually run the python script in the background
     const process = spawn('python3', [
-      '-c', 
+      '-c',
       `
 import asyncio
-import os
 import clip_factory
 
 async def main():
     with open('feed.txt', 'r') as f:
         feed_text = f.read()
-    
-    api_key = os.environ.get('GEMINI_API_KEY', '') or os.environ.get('GOOGLE_API_KEY', '')
-    try:
-        import json
-        with open('config.json', 'r') as f:
-            config = json.loads(f.read())
-            api_key = api_key or config.get('GOOGLE_API_KEY', '')
-    except: pass
-    
-    await clip_factory.run_factory(feed_text, api_key)
+    await clip_factory.run_factory(feed_text)
 
 asyncio.run(main())
       `

@@ -30,9 +30,7 @@ function ClipCard({ clip, index, selected, onToggle }: {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
 
-  const keyword = clip.match(/_k(\d+)_/)?.[1];
-  const part = clip.match(/part_(\d+)/)?.[1];
-  const promptName = clip.replace(/_s\d+_k\d+_part_\d+\.mp4$/, '').replace(/_/g, ' ').trim();
+  const clipName = clip.replace(/\.mp4$/, '').replace(/_/g, ' ').trim();
   const posterUrl = `/api/thumbnail/${clip}`;
 
   const handlePlay = useCallback(() => {
@@ -127,8 +125,7 @@ function ClipCard({ clip, index, selected, onToggle }: {
 
       <div className="p-3 flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-medium text-white truncate capitalize" title={promptName}>{promptName}</p>
-          <p className="text-[10px] text-zinc-500 font-mono mt-0.5">keyword {keyword} · part {part}</p>
+          <p className="text-xs font-medium text-white truncate font-mono" title={clipName}>{clipName}</p>
         </div>
         <a
           href={`/clips/${clip}`}
@@ -147,7 +144,6 @@ export default function App() {
   const [logs, setLogs] = useState('');
   const [clips, setClips] = useState<string[]>([]);
   const [selectedClips, setSelectedClips] = useState<Set<string>>(new Set());
-  const [apiKey, setApiKey] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<'feed' | 'logs' | 'clips' | 'settings' | 'help' | 'picker'>('feed');
   const [isSaving, setIsSaving] = useState(false);
@@ -193,22 +189,12 @@ export default function App() {
 
   const fetchInitialData = async () => {
     try {
-      const [feedRes, settingsRes] = await Promise.all([
-        fetch('/api/feed'),
-        fetch('/api/settings')
-      ]);
-
-      if (!feedRes.ok || !settingsRes.ok) return;
-
+      const feedRes = await fetch('/api/feed');
+      if (!feedRes.ok) return;
       const feedText = await feedRes.text();
-      const settingsText = await settingsRes.text();
-
       try {
         const feedData = JSON.parse(feedText);
-        const settingsData = JSON.parse(settingsText);
-
         if (feedData.content !== undefined) setFeed(feedData.content);
-        if (settingsData.GOOGLE_API_KEY) setApiKey(settingsData.GOOGLE_API_KEY);
       } catch (e) {}
     } catch (err) {
       console.error("Failed to fetch initial config", err);
@@ -243,26 +229,6 @@ export default function App() {
     }
   };
 
-  const saveSettings = async () => {
-    setIsSaving(true);
-    setStatus(null);
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ GOOGLE_API_KEY: apiKey })
-      });
-      if (res.ok) {
-        setStatus({ type: 'success', message: 'Settings saved!' });
-      } else {
-        setStatus({ type: 'error', message: 'Failed to save settings.' });
-      }
-    } catch (err) {
-      setStatus({ type: 'error', message: 'Error saving settings.' });
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const runPipeline = async () => {
     setIsRunning(true);
@@ -400,7 +366,7 @@ export default function App() {
               <div className="flex items-center justify-between flex-wrap gap-4">
                 <div>
                   <h2 className="text-2xl font-bold text-white tracking-tight">Input Stream</h2>
-                  <p className="text-zinc-400 text-sm mt-1">Define your video sources (YouTube, Internet Archive, etc.), durations, and visual prompts.</p>
+                  <p className="text-zinc-400 text-sm mt-1">Define your video sources, clip duration, and exact start timestamp. One line per clip.</p>
                 </div>
                 <div className="flex items-center gap-3">
                   {status && (
@@ -437,7 +403,7 @@ export default function App() {
                 <textarea
                   value={feed}
                   onChange={(e) => setFeed(e.target.value)}
-                  placeholder="URL | duration | prompt1, prompt2 | @credit (optional)"
+                  placeholder="URL | duration | start_time | @credit (optional)"
                   className="relative w-full h-[60vh] bg-zinc-900 border border-zinc-800 rounded-xl p-6 font-mono text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all resize-none shadow-inner"
                 />
               </div>
@@ -449,15 +415,15 @@ export default function App() {
                 </div>
                 <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
                   <h3 className="text-zinc-300 font-semibold text-sm mb-2">Duration</h3>
-                  <p className="text-zinc-500 text-xs">Clip length in seconds (e.g., 8, 12).</p>
+                  <p className="text-zinc-500 text-xs">Clip length in seconds (e.g., <span className="text-zinc-400 font-mono">8</span>, <span className="text-zinc-400 font-mono">15</span>).</p>
                 </div>
                 <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
-                  <h3 className="text-zinc-300 font-semibold text-sm mb-2">Keywords</h3>
-                  <p className="text-zinc-500 text-xs">Comma-separated scene descriptions. Gemini finds the exact moment for each — e.g. <span className="text-zinc-400 font-mono">cooking, laughing</span></p>
+                  <h3 className="text-zinc-300 font-semibold text-sm mb-2">Start Time</h3>
+                  <p className="text-zinc-500 text-xs">Where to cut from — e.g. <span className="text-zinc-400 font-mono">1:30</span> or <span className="text-zinc-400 font-mono">0:04:22</span> or plain seconds like <span className="text-zinc-400 font-mono">90</span>.</p>
                 </div>
                 <div className="bg-zinc-900/50 border border-blue-500/20 p-4 rounded-xl">
                   <h3 className="text-zinc-300 font-semibold text-sm mb-2">Credit <span className="text-zinc-600 font-normal">(optional)</span></h3>
-                  <p className="text-zinc-500 text-xs">Text burned into the bottom-left corner of every clip — e.g. <span className="text-zinc-400 font-mono">@yourchannel</span></p>
+                  <p className="text-zinc-500 text-xs">Text burned into the bottom-left corner — e.g. <span className="text-zinc-400 font-mono">@yourchannel</span></p>
                 </div>
               </div>
             </motion.div>
@@ -482,50 +448,45 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               className="max-w-3xl space-y-8"
             >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-white tracking-tight">System Settings</h2>
-                  <p className="text-zinc-400 text-sm mt-1">Configure API keys and core preferences.</p>
-                </div>
-                 <div className="flex items-center gap-3">
-                  {status && (
-                    <motion.div 
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className={`flex items-center gap-2 text-sm font-medium ${status.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}
-                    >
-                      {status.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-                      {status.message}
-                    </motion.div>
-                  )}
-                  <button
-                    onClick={saveSettings}
-                    disabled={isSaving}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-5 py-2 rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95 font-medium"
-                  >
-                    {isSaving ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Save Config
-                  </button>
-                </div>
+              <div>
+                <h2 className="text-2xl font-bold text-white tracking-tight">System Settings</h2>
+                <p className="text-zinc-400 text-sm mt-1">Core preferences and format reference.</p>
               </div>
 
               <div className="space-y-4">
                 <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl flex flex-col gap-4">
                   <div>
-                    <h3 className="text-md font-semibold text-zinc-200">Google Gemini API Key</h3>
+                    <h3 className="text-md font-semibold text-zinc-200">Feed Format</h3>
                     <p className="text-sm text-zinc-500 mb-4">
-                      Required for file uploads and video analysis using Gemini 1.5 Flash.
-                      If you're using AI Studio, you may have one configured in environment variables natively, but
-                      providing it here ensures the background script can use it.
+                      One clip per line. Paste your URL, how long you want the clip, and where to start cutting. Credit is optional.
                     </p>
                   </div>
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl p-4 font-mono text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all shadow-inner"
-                  />
+                  <pre className="bg-black p-4 rounded-xl text-xs font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap">
+{`URL | duration_seconds | start_time | @credit
+
+# Examples:
+https://archive.org/... | 10 | 1:30 | @mychannel
+https://youtube.com/...  | 8  | 0:04:22
+https://youtube.com/...  | 15 | 90`}
+                  </pre>
+                </div>
+
+                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
+                  <h3 className="text-md font-semibold text-zinc-200 mb-2">Start Time Formats</h3>
+                  <div className="grid grid-cols-3 gap-3 text-sm">
+                    <div className="bg-zinc-800 rounded-xl p-3 text-center">
+                      <p className="font-mono text-blue-300 text-base">1:30</p>
+                      <p className="text-zinc-500 text-xs mt-1">MM:SS</p>
+                    </div>
+                    <div className="bg-zinc-800 rounded-xl p-3 text-center">
+                      <p className="font-mono text-blue-300 text-base">0:04:22</p>
+                      <p className="text-zinc-500 text-xs mt-1">HH:MM:SS</p>
+                    </div>
+                    <div className="bg-zinc-800 rounded-xl p-3 text-center">
+                      <p className="font-mono text-blue-300 text-base">90</p>
+                      <p className="text-zinc-500 text-xs mt-1">Plain seconds</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -699,71 +660,29 @@ export default function App() {
             >
               <div>
                 <h2 className="text-2xl font-bold text-white tracking-tight">System Guide</h2>
-                <p className="text-zinc-400 text-sm mt-1">Everything you need to know to run the Clip Factory.</p>
+                <p className="text-zinc-400 text-sm mt-1">Everything you need to know to run Clip Factory.</p>
               </div>
 
               <section className="space-y-4">
-                <h3 className="text-lg font-semibold text-blue-400">1. Installation</h3>
-                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
-                  <p className="text-sm text-zinc-300 leading-relaxed mb-4">
-                    Before running the script, ensure you have Node.js and FFMPEG installed on your machine.
-                    The platform automatically handles dependencies when you run the project.
-                  </p>
-                  <pre className="bg-black p-4 rounded-xl text-xs font-mono text-emerald-500 overflow-x-auto">
-                    npm install
-                  </pre>
-                </div>
-              </section>
-
-              <section className="space-y-4">
-                <h3 className="text-lg font-semibold text-blue-400">2. Configuration</h3>
-                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
-                  <p className="text-sm text-zinc-300 leading-relaxed mb-4">
-                    Set your Gemini API key as an environment variable to authenticate the file uploads and analysis.
-                  </p>
-                  <pre className="bg-black p-4 rounded-xl text-xs font-mono text-zinc-400 overflow-x-auto">
-                    # Linux/macOS
-                    export GOOGLE_API_KEY="your-api-key-here"
-
-                    # Windows (Command Prompt)
-                    set GOOGLE_API_KEY="your-api-key-here"
-                  </pre>
-                </div>
-              </section>
-
-              <section className="space-y-4">
-                <h3 className="text-lg font-semibold text-white">Local Run Guide (Important)</h3>
-                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-4">
+                <h3 className="text-lg font-semibold text-blue-400">Two ways to extract clips</h3>
+                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl space-y-4">
                   <div className="flex items-start gap-3">
                     <div className="bg-blue-500/10 p-2 rounded-lg text-blue-400 font-bold text-xs">1</div>
                     <div>
-                      <p className="text-white font-medium">Fixing "403 Forbidden" (YouTube Blocks)</p>
+                      <p className="text-white font-medium">Feed Tab — Batch Mode</p>
                       <p className="text-zinc-400 text-sm mt-1">
-                        YouTube often blocks cloud IPs. Since you are running locally, the factory now tries to use your Chrome browser cookies. 
-                        Make sure you have Chrome installed and are logged into YouTube.
+                        Paste one line per clip in the format <code className="text-zinc-300 font-mono">URL | duration | start_time | @credit</code>.
+                        Hit <strong>Run Pipeline</strong> and all clips are cut and saved to the Clips tab automatically.
                       </p>
                     </div>
                   </div>
-                  
                   <div className="flex items-start gap-3">
                     <div className="bg-blue-500/10 p-2 rounded-lg text-blue-400 font-bold text-xs">2</div>
                     <div>
-                      <p className="text-white font-medium">Fixing Gemini SDK Error</p>
+                      <p className="text-white font-medium">Picker Tab — Visual Mode</p>
                       <p className="text-zinc-400 text-sm mt-1">
-                        If you see an error about <code className="text-blue-300">upload_file</code>, your local Python library is outdated. 
-                        Run this in your terminal:
-                        <br />
-                        <code className="bg-black text-green-400 px-2 py-1 rounded mt-2 inline-block">pip install -U google-generativeai yt-dlp</code>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3">
-                    <div className="bg-blue-500/10 p-2 rounded-lg text-blue-400 font-bold text-xs">3</div>
-                    <div>
-                      <p className="text-white font-medium">Requirements</p>
-                      <p className="text-zinc-400 text-sm mt-1">
-                        Ensure you have <code className="text-zinc-300 font-mono">ffmpeg</code> installed on your system path.
+                        Paste URLs, set a clip duration, and browse auto-generated thumbnails (one every 30 seconds).
+                        Click the frames you want, then hit <strong>Download as ZIP</strong>.
                       </p>
                     </div>
                   </div>
@@ -771,48 +690,43 @@ export default function App() {
               </section>
 
               <section className="space-y-4">
-                <h3 className="text-lg font-semibold text-blue-400">Execution Details</h3>
-                <div className="bg-blue-500/10 border border-blue-500/20 p-5 rounded-xl mb-4 flex items-start gap-3">
-                  <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-blue-100 leading-relaxed">
-                    <strong>Exact Scene Detection:</strong> Gemini watches the video and finds the single most precise moment matching your description. Add a 4th field (e.g. <code className="text-blue-300">@mychannel</code>) to burn a credit watermark into the bottom-left of every clip.
-                  </p>
-                </div>
-                <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-xl mb-4 flex items-start gap-3">
-                  <Clock className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-emerald-100 leading-relaxed">
-                    <strong>Rate Limit Protection:</strong> An 8-second delay is added between video requests. If Gemini hits a rate limit (429), it automatically waits 60 seconds and retries up to 3 times before moving on.
-                  </p>
-                </div>
-                <div className="bg-orange-500/10 border border-orange-500/20 p-5 rounded-xl mb-4 flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-orange-300 leading-relaxed">
-                    <strong>Cloud Restrictions:</strong> YouTube actively blocks automated requests from cloud IPs.
-                    Generic sites like <strong>Internet Archive</strong> or <strong>Streamable</strong> often work perfectly in this preview.
-                    For reliable YouTube 4K extraction, run the project locally.
-                  </p>
-                </div>
+                <h3 className="text-lg font-semibold text-blue-400">Feed format</h3>
                 <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-xl">
-                  <p className="text-sm text-zinc-300 leading-relaxed mb-4">
-                    Run the factory from the root directory of this project. It will read <code className="text-blue-400">feed.txt</code> and begin the pipeline.
-                  </p>
-                  <pre className="bg-black p-4 rounded-xl text-xs font-mono text-blue-500 overflow-x-auto">
-                    npx tsx clip_factory.ts
+                  <pre className="bg-black p-4 rounded-xl text-xs font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap">
+{`URL | duration_seconds | start_time | @credit
+
+https://archive.org/... | 10 | 1:30 | @mychannel
+https://youtube.com/...  | 8  | 0:04:22
+https://youtube.com/...  | 15 | 90`}
                   </pre>
+                  <p className="text-zinc-500 text-xs mt-3">Start time accepts <code className="text-zinc-400">MM:SS</code>, <code className="text-zinc-400">HH:MM:SS</code>, or plain seconds.</p>
                 </div>
               </section>
 
-              <div className="bg-blue-600/10 border border-blue-500/20 p-6 rounded-2xl flex gap-4 items-start">
-                <Info className="w-6 h-6 text-blue-400 shrink-0" />
-                <div className="text-sm text-blue-200">
-                  <p className="font-bold mb-1">How it works:</p>
-                  <p className="opacity-80">
-                    The script downloads a tiny 144p version of the video to minimize upload time. 
-                    Gemini 1.5 Flash then scans the video for your visual prompt. Once a timestamp is found, 
-                    only that specific segment is downloaded in 4K resolution using native yt-dlp slicing.
-                  </p>
+              <section className="space-y-4">
+                <h3 className="text-lg font-semibold text-blue-400">Notes</h3>
+                <div className="space-y-3">
+                  <div className="bg-orange-500/10 border border-orange-500/20 p-5 rounded-xl flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-orange-300 leading-relaxed">
+                      <strong>YouTube on cloud IPs:</strong> YouTube often blocks automated downloads from cloud servers.
+                      Sites like <strong>Internet Archive</strong> work reliably. For YouTube, run the project locally.
+                    </p>
+                  </div>
+                  <div className="bg-blue-500/10 border border-blue-500/20 p-5 rounded-xl flex items-start gap-3">
+                    <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-blue-100 leading-relaxed">
+                      <strong>Credit watermark:</strong> Add <code className="text-blue-300">@handle</code> as the 4th field to burn text into the bottom-left corner of every clip using FFmpeg drawtext.
+                    </p>
+                  </div>
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-xl flex items-start gap-3">
+                    <Clock className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-emerald-100 leading-relaxed">
+                      <strong>How extraction works:</strong> yt-dlp fetches the direct stream URL, then FFmpeg seeks to your timestamp and cuts the clip — no full video download required.
+                    </p>
+                  </div>
                 </div>
-              </div>
+              </section>
             </motion.div>
           )}
         </AnimatePresence>
