@@ -18,18 +18,23 @@ MODEL_NAME = "gemini-1.5-flash"  # Reliable for video analysis
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(CLIPS_DIR, exist_ok=True)
 
-# Logger setup
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler()
-    ]
-)
+logger = logging.getLogger('clip_factory')
+logger.setLevel(logging.INFO)
+
+def setup_logger():
+    logger.handlers.clear()
+    fh = logging.FileHandler(LOG_FILE, mode='w')
+    ch = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
+    logger.addHandler(fh)
+    logger.addHandler(ch)
 
 async def log_msg(level, message):
-    getattr(logging, level.lower())(message)
+    if not logger.handlers:
+        setup_logger()
+    getattr(logger, level.lower())(message)
 
 def sanitize_filename(name):
     return re.sub(r'[^a-zA-Z0-9]', '_', name).lower()[:50]
@@ -178,9 +183,8 @@ async def process_entry(api_key, index, url, duration, prompt):
         await download_4k_clip(url, ts, duration, output_file)
 
 async def run_factory(feed_text, api_key):
-    # Setup log
-    with open(LOG_FILE, "w") as f:
-        f.write(f"--- Pipeline Started at {datetime.now()} ---\n")
+    setup_logger()
+    await log_msg("INFO", f"--- Pipeline Started at {datetime.now()} ---")
         
     lines = [l.strip() for l in feed_text.strip().split('\n') if l.strip()]
     tasks = []
@@ -200,8 +204,7 @@ async def run_factory(feed_text, api_key):
         await asyncio.gather(*tasks)
         
     await log_msg("INFO", "--- Batch processing complete ---")
-    with open(LOG_FILE, "a") as f:
-        f.write(f"\n--- Pipeline Finished at {datetime.now()} ---\n")
+    await log_msg("INFO", f"--- Pipeline Finished at {datetime.now()} ---")
 
 if __name__ == "__main__":
     # Example usage
