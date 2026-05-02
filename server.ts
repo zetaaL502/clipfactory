@@ -27,10 +27,15 @@ async function startServer() {
   // API Routes
   app.get('/api/pipeline-status', (req, res) => {
     if (!fs.existsSync(LOG_FILE)) {
-      return res.json({ content: 'No logs yet. Start the pipeline.' });
+      return res.json({ content: '' });
     }
     const content = fs.readFileSync(LOG_FILE, 'utf-8');
     res.json({ content });
+  });
+
+  app.post('/api/clear-log', (req, res) => {
+    fs.writeFileSync(LOG_FILE, '');
+    res.json({ status: 'ok' });
   });
 
   app.get('/api/clips', (req, res) => {

@@ -407,10 +407,15 @@ export default function App() {
                   <p className="text-zinc-400 text-sm mt-1">Real-time terminal output from the processing pipeline.</p>
                 </div>
                 <button
-                  onClick={fetchLogsAndClips}
-                  className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors"
+                  onClick={async () => {
+                    await fetch('/api/clear-log', { method: 'POST' });
+                    setLogs('');
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors text-xs font-medium"
+                  title="Clear logs"
                 >
-                  <RefreshCcw className="w-5 h-5" />
+                  <RefreshCcw className="w-4 h-4" />
+                  Clear
                 </button>
               </div>
 
