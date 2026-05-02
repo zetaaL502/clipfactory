@@ -21,7 +21,7 @@ export default defineConfig(({mode}) => {
       allowedHosts: true,
       hmr: process.env.DISABLE_HMR === 'true' ? false : true,
       watch: {
-        ignored: ['**/.local/**', '**/picker_jobs/**', '**/clips/**', '**/node_modules/**'],
+        ignored: ['**/.local/**', '**/.cache/**', '**/picker_jobs/**', '**/clips/**', '**/node_modules/**'],
       },
     },
   };

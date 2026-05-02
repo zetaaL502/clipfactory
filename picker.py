@@ -76,6 +76,7 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
         'retries': 5,
         'fragment_retries': 5,
         'socket_timeout': 30,
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
     }
     if os.path.exists(cookies_file):
         ydl_opts['cookiefile'] = cookies_file
