@@ -201,14 +201,20 @@ async def run_factory(feed_text, api_key):
     lines = [l.strip() for l in feed_text.strip().split('\n') if l.strip()]
     tasks = []
     
+    task_index = 1
     for i, line in enumerate(lines):
-        # Format: URL | DURATION | PROMPT
+        # Format: URL | DURATION | prompt1, prompt2, prompt3
         parts = [p.strip() for p in line.split('|')]
         if len(parts) >= 3:
-            url, dur, prompt = parts[0], parts[1], parts[2]
+            url, dur = parts[0], parts[1]
+            prompts_raw = parts[2]
+            # Support comma-separated prompts — each gets its own 3 clips
+            prompts = [p.strip() for p in prompts_raw.split(',') if p.strip()]
             try:
                 duration = int(dur)
-                tasks.append(process_entry(api_key, i+1, url, duration, prompt))
+                for prompt in prompts:
+                    tasks.append(process_entry(api_key, task_index, url, duration, prompt))
+                    task_index += 1
             except ValueError:
                 await log_msg("ERROR", f"Invalid duration in line: {line}")
                 

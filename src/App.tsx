@@ -325,7 +325,7 @@ export default function App() {
                 <textarea
                   value={feed}
                   onChange={(e) => setFeed(e.target.value)}
-                  placeholder="URL | duration | prompt"
+                  placeholder="URL | duration | prompt1, prompt2, prompt3"
                   className="relative w-full h-[60vh] bg-zinc-900 border border-zinc-800 rounded-xl p-6 font-mono text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all resize-none shadow-inner"
                 />
               </div>
@@ -340,8 +340,8 @@ export default function App() {
                   <p className="text-zinc-500 text-xs">Target duration in seconds (e.g., 8, 12).</p>
                 </div>
                 <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
-                  <h3 className="text-zinc-300 font-semibold text-sm mb-2">Visual Prompt</h3>
-                  <p className="text-zinc-500 text-xs text-balance">Describe the specific moment you want Gemini to find.</p>
+                  <h3 className="text-zinc-300 font-semibold text-sm mb-2">Keywords</h3>
+                  <p className="text-zinc-500 text-xs text-balance">One or more comma-separated prompts. Each gets its own 3 clips — e.g. <span className="text-zinc-400 font-mono">cooking, dancing, laughing</span></p>
                 </div>
               </div>
             </motion.div>
