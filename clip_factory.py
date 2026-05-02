@@ -114,51 +114,109 @@ async def download_4k_clip(url, start_time, duration, output_path):
             os.remove(output_path)
         return False
 
-async def analyze_video(api_key, video_path, prompt):
-    """Use Gemini 1.5 Flash to find 3 distinct scenes"""
+async def get_video_duration(video_path):
+    """Use ffprobe to get the total duration of a video in seconds."""
+    try:
+        import shutil
+        ffprobe = shutil.which("ffprobe") or "ffprobe"
+        process = await asyncio.create_subprocess_exec(
+            ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", video_path,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        stdout, _ = await process.communicate()
+        data = json.loads(stdout)
+        return float(data["format"]["duration"])
+    except Exception:
+        return None
+
+def spread_timestamps(total_duration, clip_duration, count=3):
+    """Generate evenly-spread timestamps across the video."""
+    if not total_duration or total_duration <= clip_duration * count:
+        step = max(clip_duration + 5, 15)
+        return [i * step for i in range(count)]
+    usable = total_duration - clip_duration
+    step = usable / (count - 1) if count > 1 else usable
+    return [round(i * step) for i in range(count)]
+
+def enforce_min_gap(timestamps, min_gap, total_duration=None):
+    """Ensure timestamps are at least min_gap seconds apart. Fill gaps if needed."""
+    timestamps = sorted(set(int(t) for t in timestamps))
+    result = [timestamps[0]]
+    for ts in timestamps[1:]:
+        if ts - result[-1] >= min_gap:
+            result.append(ts)
+    # If we still don't have 3, pad by adding gaps after the last one
+    while len(result) < 3:
+        candidate = result[-1] + min_gap
+        if total_duration and candidate + min_gap > total_duration:
+            candidate = max(0, result[0] - min_gap)
+        result.append(int(candidate))
+    return sorted(result[:3])
+
+async def analyze_video(api_key, video_path, prompt, clip_duration=10):
+    """Use Gemini 1.5 Flash to find 3 visually distinct scenes matching the prompt."""
+    total_duration = await get_video_duration(video_path)
+    min_gap = max(clip_duration + 5, 20)  # clips must be at least this far apart
+
     if not api_key:
-        return [0, 10, 20]
+        await log_msg("WARNING", f"No Gemini API key set — spreading timestamps evenly across video. Add your key in Settings for AI scene detection.")
+        return spread_timestamps(total_duration, clip_duration)
 
     try:
         import google.generativeai as genai
-        # Force a check for the correct version logic
         if not hasattr(genai, "upload_file"):
-            await log_msg("ERROR", "!!! LOCAL SDK ERROR !!! Your 'google-generativeai' package is outdated. Run: pip install -U google-generativeai")
-            return [2, 12, 22]
+            await log_msg("ERROR", "google-generativeai SDK is outdated — run: pip install -U google-generativeai")
+            return spread_timestamps(total_duration, clip_duration)
 
         genai.configure(api_key=api_key)
+
+        dur_hint = f" The video is {int(total_duration)} seconds long." if total_duration else ""
         system_instruction = (
-            "You are a professional video editor. Identify 3 DISTINCT timestamps (start times in seconds) "
-            f"in the video that match: '{prompt}'. Return ONLY 3 numbers separated by commas."
+            "You are a professional video editor specializing in content-aware scene detection. "
+            f"Find exactly 3 timestamps (in seconds) in the video where the visual content clearly shows: '{prompt}'."
+            f"{dur_hint} "
+            "Rules you MUST follow: "
+            f"(1) Each timestamp must show DIFFERENT footage — never the same scene twice. "
+            f"(2) Timestamps must be at least {min_gap} seconds apart from each other. "
+            "(3) Spread them across the full length of the video — pick from the beginning, middle, and end where possible. "
+            "(4) Only include timestamps where the prompt content is actually visible on screen. "
+            "Reply with ONLY 3 integer numbers in seconds, separated by commas. No other text."
         )
         model = genai.GenerativeModel(MODEL_NAME, system_instruction=system_instruction)
-        
-        await log_msg("INFO", f"Uploading {video_path} to Gemini...")
-        # Use the explicit function from the module
+
+        await log_msg("INFO", f"Uploading video to Gemini for '{prompt}' analysis...")
         myfile = genai.upload_file(video_path)
-        
+
         while myfile.state.name == "PROCESSING":
             await asyncio.sleep(2)
             myfile = genai.get_file(myfile.name)
-            
-        response = model.generate_content([myfile, f"Prompt: {prompt}"], generation_config={"candidate_count": 1})
+
+        response = model.generate_content(
+            [myfile, f"Find 3 timestamps where this is clearly visible: {prompt}"],
+            generation_config={"candidate_count": 1, "temperature": 0.2}
+        )
         text = response.text.strip()
-        
-        timestamps = []
-        found = re.findall(r"(\d+(?:\.\d+)?)", text)
-        for val in found:
-            timestamps.append(float(val))
-                
+        await log_msg("INFO", f"Gemini returned timestamps for '{prompt}': {text}")
+
+        raw = [float(v) for v in re.findall(r"(\d+(?:\.\d+)?)", text)]
+
         try: genai.delete_file(myfile.name)
         except: pass
-        
-        if len(timestamps) >= 3:
-            timestamps.sort()
-            return timestamps[:3]
-        return [0, 10, 20]
+
+        if len(raw) >= 3:
+            timestamps = enforce_min_gap(raw[:6], min_gap, total_duration)
+            return timestamps
+        elif len(raw) > 0:
+            # Not enough timestamps — spread the ones we got
+            await log_msg("WARNING", f"Gemini returned fewer than 3 timestamps — filling gaps automatically.")
+            return enforce_min_gap(raw + spread_timestamps(total_duration, clip_duration), min_gap, total_duration)
+        else:
+            await log_msg("WARNING", f"Gemini returned no usable timestamps — spreading evenly.")
+            return spread_timestamps(total_duration, clip_duration)
+
     except Exception as e:
         await log_msg("ERROR", f"Gemini analysis failed: {str(e)}")
-        return [0, 10, 20]
+        return spread_timestamps(total_duration, clip_duration)
 
 
 async def process_entry(api_key, index, url, duration, prompt):
@@ -173,8 +231,11 @@ async def process_entry(api_key, index, url, duration, prompt):
         # Try a quick test 4K download to see if source is accessible at all
         await log_msg("WARNING", f"Low-res preview unavailable for entry {index} — attempting direct extraction anyway.")
         
-    # 2. Analyze (use temp file if it exists, else use default timestamps)
-    timestamps = await analyze_video(api_key, temp_file, prompt) if os.path.exists(temp_file) else [0, 10, 20]
+    # 2. Analyze (use temp file if it exists, else spread evenly)
+    if os.path.exists(temp_file):
+        timestamps = await analyze_video(api_key, temp_file, prompt, clip_duration=duration)
+    else:
+        timestamps = spread_timestamps(None, duration)
     
     # 3. Clean up temp preview
     if os.path.exists(temp_file):
