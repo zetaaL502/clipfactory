@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Play, 
   FileText, 
@@ -13,8 +13,7 @@ import {
   Info,
   Power,
   Trash2,
-  Trash,
-  ExternalLink,
+  X,
   Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -30,6 +29,8 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [modalClip, setModalClip] = useState<string | null>(null);
+  const modalVideoRef = useRef<HTMLVideoElement>(null);
 
   // Grouped clips logic
   const groupedClips = React.useMemo(() => {
@@ -545,24 +546,25 @@ export default function App() {
                                 className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-950 transition-all cursor-pointer"
                               />
                             </div>
-                            <div className="aspect-video bg-zinc-800 flex items-center justify-center relative group/video">
-                              <Video className="w-12 h-12 text-zinc-700 group-hover:scale-110 group-hover:text-blue-500/50 transition-all duration-500" />
-                              
-                              <video 
-                                src={`/clips/${clip}`} 
-                                className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover/video:opacity-100 transition-opacity"
+                            <div
+                              className="aspect-video bg-zinc-800 flex items-center justify-center relative group/video cursor-pointer"
+                              onClick={() => setModalClip(clip)}
+                            >
+                              <video
+                                src={`/clips/${clip}`}
+                                className="absolute inset-0 w-full h-full object-cover"
                                 muted
                                 playsInline
+                                preload="metadata"
                                 onMouseOver={e => e.currentTarget.play()}
                                 onMouseOut={e => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
                               />
-
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4 z-10">
-                                 <a href={`/clips/${clip}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-white text-black text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95 transition-transform">
-                                   <ExternalLink className="w-3 h-3" />
-                                   OPEN FULL
-                                 </a>
+                              <div className="absolute inset-0 flex items-center justify-center z-10 opacity-0 group-hover/video:opacity-100 transition-opacity duration-200">
+                                <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center shadow-2xl">
+                                  <Play className="w-6 h-6 text-white fill-white ml-1" />
+                                </div>
                               </div>
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover/video:opacity-100 transition-opacity duration-200 z-[5]" />
                             </div>
                             <div className="p-4 flex items-center justify-between gap-4">
                               <div className="min-w-0">
@@ -572,7 +574,12 @@ export default function App() {
                                   <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-tighter">Part {clip.match(/part_(\d+)/)?.[1] || '?'}</p>
                                 </div>
                               </div>
-                              <a href={`/clips/${clip}`} download={clip} className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-all">
+                              <a
+                                href={`/clips/${clip}`}
+                                download={clip}
+                                onClick={e => e.stopPropagation()}
+                                className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-all"
+                              >
                                 <Download className="w-4 h-4" />
                               </a>
                             </div>
@@ -734,6 +741,67 @@ export default function App() {
           background: #3f3f46;
         }
       `}</style>
+
+      {/* Video Modal */}
+      <AnimatePresence>
+        {modalClip && (
+          <motion.div
+            key="modal-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4"
+            onClick={() => { setModalClip(null); }}
+          >
+            <motion.div
+              key="modal-content"
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+              className="relative w-full max-w-4xl bg-zinc-900 rounded-2xl overflow-hidden shadow-2xl border border-zinc-700"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Close + download bar */}
+              <div className="flex items-center justify-between px-5 py-3 bg-zinc-900 border-b border-zinc-800">
+                <p className="text-sm font-medium text-zinc-300 truncate max-w-[70%]" title={modalClip}>
+                  {modalClip}
+                </p>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`/clips/${modalClip}`}
+                    download={modalClip}
+                    className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-lg transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download
+                  </a>
+                  <button
+                    onClick={() => setModalClip(null)}
+                    className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-all"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Video player */}
+              <div className="bg-black aspect-video">
+                <video
+                  ref={modalVideoRef}
+                  key={modalClip}
+                  src={`/clips/${modalClip}`}
+                  className="w-full h-full"
+                  controls
+                  autoPlay
+                  playsInline
+                />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

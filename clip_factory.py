@@ -94,22 +94,25 @@ async def download_4k_clip(url, start_time, duration, output_path):
         'noplaylist': True,
         'ffmpeg_location': ffmpeg_path,
         'quiet': True,
-        # LOCAL RUN FIX: Use browser cookies to skip 403 Forbidden blocks
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
     try:
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         
-        # Check if file exists and has content (Min 10KB to avoid zero-duration headers)
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 10000: 
+        # Check if file exists and has real content (min 10KB)
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
             return True
         else:
-            await log_msg("WARNING", f"Download produced 0-second/corrupt file for {output_path}. Please ensure FFMPEG is installed and in your PATH.")
-            return await execute_fallback(output_path, duration, True)
+            await log_msg("WARNING", f"Download produced empty/corrupt file for {output_path} — skipping clip.")
+            if os.path.exists(output_path):
+                os.remove(output_path)
+            return False
     except Exception as e:
-        await log_msg("ERROR", f"4K Download failed for {url} at {start_time}s: {str(e)}")
-        return await execute_fallback(output_path, duration, True)
+        await log_msg("ERROR", f"4K Download failed for {url} at {start_time}s: {str(e)} — skipping clip.")
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        return False
 
 async def analyze_video(api_key, video_path, prompt):
     """Use Gemini 1.5 Flash to find 3 distinct scenes"""
@@ -164,23 +167,32 @@ async def process_entry(api_key, index, url, duration, prompt):
     
     await log_msg("INFO", f"--- Processing Entry {index}: {prompt} ---")
     
-    # 1. Download preview
-    success = await download_low_res(url, temp_file)
-    if not success:
-        await execute_fallback(temp_file, 30, False) # temporary fake for Gemini
+    # 1. Download low-res preview for Gemini analysis
+    low_res_ok = await download_low_res(url, temp_file)
+    if not low_res_ok:
+        # Try a quick test 4K download to see if source is accessible at all
+        await log_msg("WARNING", f"Low-res preview unavailable for entry {index} — attempting direct extraction anyway.")
         
-    # 2. Analyze
-    timestamps = await analyze_video(api_key, temp_file, prompt)
+    # 2. Analyze (use temp file if it exists, else use default timestamps)
+    timestamps = await analyze_video(api_key, temp_file, prompt) if os.path.exists(temp_file) else [0, 10, 20]
     
     # 3. Clean up temp preview
     if os.path.exists(temp_file):
         os.remove(temp_file)
         
-    # 4. Extract 3 clips
+    # 4. Extract clips — only save ones that actually download successfully
+    succeeded = 0
     for i, ts in enumerate(timestamps):
         output_file = os.path.join(CLIPS_DIR, f"{sanitized}_{index}_part_{i+1}.mp4")
         await log_msg("INFO", f"Extracting clip {i+1}/3 for '{prompt}' at {ts}s...")
-        await download_4k_clip(url, ts, duration, output_file)
+        ok = await download_4k_clip(url, ts, duration, output_file)
+        if ok:
+            succeeded += 1
+    
+    if succeeded == 0:
+        await log_msg("ERROR", f"Entry {index} ('{prompt}'): all clip extractions failed — source may be geo-blocked or unavailable on this server. Try Internet Archive links instead of YouTube.")
+    else:
+        await log_msg("INFO", f"Entry {index} ('{prompt}'): {succeeded}/3 clips extracted successfully.")
 
 async def run_factory(feed_text, api_key):
     setup_logger()
