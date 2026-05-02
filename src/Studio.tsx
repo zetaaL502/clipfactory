@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Film, Link, Clock, AtSign, Download, Loader2, AlertCircle,
   CheckCircle2, X, Play, Square, ChevronRight, Power, ChevronDown, ChevronUp,
-  Zap, Trash2, CheckSquare, MinusSquare, Info, BookOpen, Scissors
+  Zap, Trash2, CheckSquare, MinusSquare, Info, BookOpen, Scissors, CornerRightDown
 } from 'lucide-react';
 
 interface Thumbnail { file: string; timestamp: number; label: string; }
@@ -24,6 +24,32 @@ function readableDuration(secs: number) {
   if (secs < 60) return `${secs} sec`;
   if (secs % 60 === 0) return `${secs / 60} min`;
   return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+}
+
+function shortDur(secs: number) {
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60), s = secs % 60;
+  return s === 0 ? `${m}m` : `${m}m${s}s`;
+}
+
+function parseSeekTime(val: string): number | null {
+  val = val.trim().toLowerCase();
+  // HH:MM:SS or MM:SS
+  const colonMatch = val.match(/^(\d+):(\d{2})(?::(\d{2}))?$/);
+  if (colonMatch) {
+    const [, a, b, c] = colonMatch;
+    return c !== undefined ? parseInt(a) * 3600 + parseInt(b) * 60 + parseInt(c) : parseInt(a) * 60 + parseInt(b);
+  }
+  // 8min / 8m / 8 minutes
+  const minMatch = val.match(/^(\d+(?:\.\d+)?)\s*(?:min(?:utes?)?|m)$/);
+  if (minMatch) return Math.floor(parseFloat(minMatch[1]) * 60);
+  // 90s / 90sec
+  const secMatch = val.match(/^(\d+(?:\.\d+)?)\s*(?:s(?:ec(?:onds?)?)?)$/);
+  if (secMatch) return Math.floor(parseFloat(secMatch[1]));
+  // plain integer = seconds
+  const num = parseInt(val, 10);
+  if (!isNaN(num) && String(num) === val) return num;
+  return null;
 }
 
 function statusBadge(status: VideoData['status']) {
@@ -66,10 +92,10 @@ function ThumbCard({
     <div className={`relative rounded-xl overflow-hidden border-2 transition-all cursor-pointer select-none
       ${playing ? 'border-emerald-500 ring-2 ring-emerald-500/20' : selected ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-zinc-700 hover:border-zinc-500'}`}
     >
-      {/* Duration badge top */}
-      <div className={`absolute top-0 inset-x-0 z-10 text-center py-0.5 text-[10px] font-bold
-        ${playing ? 'bg-emerald-600/90 text-white' : selected ? 'bg-blue-600/80 text-white' : 'bg-black/60 text-zinc-200'}`}>
-        {readableDuration(clipDuration)} clip
+      {/* Duration badge — compact, top-right corner only */}
+      <div className={`absolute top-1 right-1 z-10 px-1.5 py-0 rounded text-[9px] font-bold leading-5
+        ${playing ? 'bg-emerald-600/90 text-white' : selected ? 'bg-blue-600/80 text-white' : 'bg-black/70 text-zinc-300'}`}>
+        {shortDur(clipDuration)}
       </div>
 
       {playing ? (
@@ -120,7 +146,10 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
-  const [thumbVisible, setThumbVisible] = useState<Record<number, number>>({});
+  const [thumbStart, setThumbStart] = useState<Record<number, number>>({});
+  const [thumbCount, setThumbCount] = useState<Record<number, number>>({});
+  const [thumbSeekVal, setThumbSeekVal] = useState<Record<number, string>>({});
+  const [thumbSeekErr, setThumbSeekErr] = useState<Record<number, boolean>>({});
   const [selections, setSelections] = useState<Set<string>>(new Set());
   const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [pickerStatus, setPickerStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
@@ -148,7 +177,8 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
     const urlList = urls.trim().split('\n').map(u => u.trim()).filter(Boolean);
     if (!urlList.length) return;
     setPickerStatus(null); setIsLoading(true);
-    setSelections(new Set()); setThumbVisible({}); setVideos([]); setJobId(null); setPlayingKey(null);
+    setSelections(new Set()); setThumbStart({}); setThumbCount({}); setThumbSeekVal({}); setThumbSeekErr({});
+    setVideos([]); setJobId(null); setPlayingKey(null);
     try {
       const res = await fetch('/api/picker/start', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -181,14 +211,25 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
   }, []);
   const handlePlay = useCallback((vi: number, ts: number) => setPlayingKey(selKey(vi, ts)), []);
   const handleStop = useCallback(() => setPlayingKey(null), []);
-  const addMore = (vi: number) => setThumbVisible(p => ({ ...p, [vi]: (p[vi] || PAGE_SIZE) + PAGE_SIZE }));
+  const addMore = (vi: number) => setThumbCount(p => ({ ...p, [vi]: (p[vi] || PAGE_SIZE) + PAGE_SIZE }));
+
+  const applySeek = (vi: number, thumbs: Thumbnail[], raw: string) => {
+    const secs = parseSeekTime(raw);
+    if (secs === null) { setThumbSeekErr(p => ({ ...p, [vi]: true })); return; }
+    setThumbSeekErr(p => ({ ...p, [vi]: false }));
+    // find first thumb index at or after secs
+    const idx = thumbs.findIndex(t => t.timestamp >= secs);
+    const startIdx = idx === -1 ? Math.max(0, thumbs.length - 1) : idx;
+    setThumbStart(p => ({ ...p, [vi]: startIdx }));
+    setThumbCount(p => ({ ...p, [vi]: PAGE_SIZE }));
+  };
 
   // Select / deselect helpers
   const allKeys = videos.flatMap(v => v.thumbnails.map(t => selKey(v.index, t.timestamp)));
   const selectAll = () => setSelections(new Set(allKeys));
   const deselectAll = () => setSelections(new Set());
-  const selectSegment = (video: VideoData, visCount: number) => {
-    const keys = video.thumbnails.slice(0, visCount).map(t => selKey(video.index, t.timestamp));
+  const selectSegment = (video: VideoData, start: number, count: number) => {
+    const keys = video.thumbnails.slice(start, start + count).map(t => selKey(video.index, t.timestamp));
     setSelections(prev => { const n = new Set(prev); keys.forEach(k => n.add(k)); return n; });
   };
   const clearSegment = (video: VideoData) => {
@@ -422,28 +463,59 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
             </div>
 
             {videos.map(video => {
-              const visCount = thumbVisible[video.index] || PAGE_SIZE;
-              const visible = video.thumbnails.slice(0, visCount);
-              const hasMore = visCount < video.thumbnails.length;
+              const start = thumbStart[video.index] || 0;
+              const count = thumbCount[video.index] || PAGE_SIZE;
+              const visible = video.thumbnails.slice(start, start + count);
+              const hasMore = start + count < video.thumbnails.length;
               const segSel = segmentSelected(video);
+              const seekVal = thumbSeekVal[video.index] || '';
+              const seekErr = thumbSeekErr[video.index] || false;
 
               return (
                 <motion.div key={video.index} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                   className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
 
                   {/* Video header */}
-                  <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800">
+                  <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-800 flex-wrap">
                     <Film className="w-4 h-4 text-zinc-500 shrink-0" />
-                    <span className="text-sm text-zinc-300 font-mono truncate flex-1" title={video.url}>{shortUrl(video.url)}</span>
+                    <span className="text-sm text-zinc-300 font-mono truncate flex-1 min-w-0" title={video.url}>{shortUrl(video.url)}</span>
                     {statusBadge(video.status)}
                     {video.duration && (
                       <span className="text-xs text-zinc-600 shrink-0">
                         {Math.floor(video.duration / 60)}:{String(Math.round(video.duration % 60)).padStart(2, '0')} total
                       </span>
                     )}
+
+                    {/* Seek-to-time input */}
+                    <div className="flex items-center gap-1 shrink-0" title="Jump to a specific time in the video">
+                      <div className={`flex items-center gap-1 rounded-lg border px-2 py-1 transition-colors
+                        ${seekErr ? 'border-red-500/60 bg-red-500/10' : 'border-zinc-700 bg-zinc-800 focus-within:border-blue-500/60'}`}>
+                        <CornerRightDown className="w-3 h-3 text-zinc-500 shrink-0" />
+                        <input
+                          type="text"
+                          value={seekVal}
+                          onChange={e => { setThumbSeekVal(p => ({ ...p, [video.index]: e.target.value })); setThumbSeekErr(p => ({ ...p, [video.index]: false })); }}
+                          onKeyDown={e => { if (e.key === 'Enter') applySeek(video.index, video.thumbnails, seekVal); }}
+                          onBlur={() => { if (seekVal.trim()) applySeek(video.index, video.thumbnails, seekVal); }}
+                          placeholder="jump to… 8:00"
+                          className="w-24 bg-transparent text-[11px] font-mono text-zinc-300 placeholder:text-zinc-600 outline-none"
+                        />
+                        {seekVal.trim() && (
+                          <button onClick={() => {
+                            setThumbSeekVal(p => ({ ...p, [video.index]: '' }));
+                            setThumbSeekErr(p => ({ ...p, [video.index]: false }));
+                            setThumbStart(p => ({ ...p, [video.index]: 0 }));
+                            setThumbCount(p => ({ ...p, [video.index]: PAGE_SIZE }));
+                          }} className="text-zinc-600 hover:text-zinc-400 transition-colors">
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
                     {/* Per-segment controls */}
                     <div className="flex items-center gap-1.5 shrink-0 pl-2 border-l border-zinc-800">
-                      <button onClick={() => selectSegment(video, visCount)}
+                      <button onClick={() => selectSegment(video, start, count)}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-zinc-800 hover:bg-blue-600/30 text-zinc-400 hover:text-blue-300 transition-all"
                         title="Select all visible thumbnails in this video">
                         <CheckSquare className="w-3 h-3" /> Select {visible.length}
@@ -492,7 +564,8 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-zinc-600">
-                          Showing {visible.length} of {video.thumbnails.length} thumbnails
+                          {start > 0 && <span className="text-blue-400/70 mr-1.5">↳ from {video.thumbnails[start]?.label}</span>}
+                          Showing {start + 1}–{start + visible.length} of {video.thumbnails.length}
                           {video.status !== 'done' && ' — still extracting…'}
                         </span>
                         {hasMore && (
