@@ -3,7 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>Clip Factory V2</title>
+    <script>
+      // Suppress Vite HMR WebSocket reconnection errors so they don't appear
+      // as unhandled rejections — they are harmless transient events on restart.
+      window.addEventListener('unhandledrejection', function(e) {
+        if (e.reason && e.reason.message && e.reason.message.indexOf('WebSocket') !== -1) {
+          e.preventDefault();
+        }
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -14,9 +14,15 @@ interface VideoData {
 }
 
 // Parse a URL line that may have "@credit" appended, e.g. "https://... @BBC"
+function cleanUrl(raw: string): string {
+  // Strip anything from the first | onward (batch-format leftovers like "URL | 30s | @credit")
+  return raw.split('|')[0].trim();
+}
+
 function parseUrlLine(line: string): { url: string; credit: string | null } {
   const m = line.trim().match(/^(.+?)\s+(@\S+)\s*$/);
-  return m ? { url: m[1].trim(), credit: m[2] } : { url: line.trim(), credit: null };
+  if (m) return { url: cleanUrl(m[1]), credit: m[2] };
+  return { url: cleanUrl(line), credit: null };
 }
 
 // Parse free-text duration: "30", "30s", "2min", "2m30s", "1:30"
@@ -331,19 +337,27 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
               className="w-36 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/50 text-zinc-200 placeholder:text-zinc-600"
             />
             <datalist id="duration-suggestions">
-              <option value="8" />
-              <option value="15" />
-              <option value="30" />
-              <option value="45" />
-              <option value="1min" />
-              <option value="1m30s" />
-              <option value="2min" />
-              <option value="3min" />
-              <option value="5min" />
-              <option value="10min" />
-              <option value="15min" />
-              <option value="20min" />
-              <option value="30min" />
+              <option value="5" label="5 sec" />
+              <option value="8" label="8 sec" />
+              <option value="10" label="10 sec" />
+              <option value="15" label="15 sec" />
+              <option value="20" label="20 sec" />
+              <option value="30" label="30 sec" />
+              <option value="45" label="45 sec" />
+              <option value="1min" label="1 min" />
+              <option value="1m30s" label="1 min 30 sec" />
+              <option value="2min" label="2 min" />
+              <option value="2m30s" label="2 min 30 sec" />
+              <option value="3min" label="3 min" />
+              <option value="4min" label="4 min" />
+              <option value="5min" label="5 min" />
+              <option value="7min" label="7 min" />
+              <option value="10min" label="10 min" />
+              <option value="15min" label="15 min" />
+              <option value="20min" label="20 min" />
+              <option value="30min" label="30 min" />
+              <option value="45min" label="45 min" />
+              <option value="1:00:00" label="1 hour" />
             </datalist>
           </div>
 

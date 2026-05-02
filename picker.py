@@ -176,7 +176,7 @@ async def main():
     with open(urls_path) as f:
         data = json.load(f)
 
-    urls = data["urls"]
+    urls = [u.split('|')[0].strip() for u in data["urls"]]
     url_credits = data.get("urlCredits", [])
     clip_duration = int(data.get("duration", 30))
 
