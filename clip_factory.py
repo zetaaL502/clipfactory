@@ -253,68 +253,86 @@ async def analyze_video(api_key, video_path, prompt, clip_duration=10):
         return spread_timestamps(total_duration, clip_duration)
 
 
-async def process_entry(api_key, line_num, keyword_num, url, duration, prompt):
-    sanitized = sanitize_filename(prompt)
-    temp_file = os.path.join(TEMP_DIR, f"temp_s{line_num}_k{keyword_num}.mp4")
-    
-    label = f"S{line_num}/K{keyword_num}"
-    await log_msg("INFO", f"--- [{label}] Processing '{prompt}' ---")
-    
-    # 1. Download low-res preview for Gemini analysis
+async def process_url_line(api_key, line_num, url, duration, prompts):
+    """
+    Process one feed line — one URL with one or more keywords.
+    Downloads the low-res preview ONCE, then for each keyword:
+      1. Asks Gemini to find 3 timestamps where that keyword is visible
+      2. Extracts those 3 clips from the high-quality source
+    Keywords are handled one-by-one so YouTube isn't hammered simultaneously.
+    """
+    label = f"Line {line_num}"
+    await log_msg("INFO", f"=== [{label}] Starting: {url} | {duration}s | keywords: {', '.join(prompts)} ===")
+
+    # --- Step 1: Download low-res preview ONCE for this URL ---
+    temp_file = os.path.join(TEMP_DIR, f"preview_s{line_num}.mp4")
+    await log_msg("INFO", f"[{label}] Downloading low-res preview for AI analysis...")
     low_res_ok = await download_low_res(url, temp_file)
     if not low_res_ok:
-        await log_msg("WARNING", f"[{label}] Low-res preview unavailable — attempting direct extraction anyway.")
-        
-    # 2. Analyze (use temp file if it exists, else spread evenly)
-    if os.path.exists(temp_file):
-        timestamps = await analyze_video(api_key, temp_file, prompt, clip_duration=duration)
-    else:
-        timestamps = spread_timestamps(None, duration)
-    
-    # 3. Clean up temp preview
+        await log_msg("WARNING", f"[{label}] Low-res preview failed — will spread timestamps evenly (no AI analysis).")
+
+    # --- Step 2: For each keyword, analyze + extract independently ---
+    for keyword_num, prompt in enumerate(prompts, start=1):
+        klabel = f"Line {line_num} / Keyword {keyword_num} '{prompt}'"
+        await log_msg("INFO", f"--- [{klabel}] Finding scenes ---")
+
+        # Gemini analysis uses the shared preview
+        if os.path.exists(temp_file):
+            timestamps = await analyze_video(api_key, temp_file, prompt, clip_duration=duration)
+        else:
+            timestamps = spread_timestamps(None, duration)
+
+        await log_msg("INFO", f"[{klabel}] Using timestamps: {timestamps}")
+
+        # Extract 3 clips at those timestamps — sequentially to avoid rate-limiting
+        sanitized = sanitize_filename(prompt)
+        succeeded = 0
+        for i, ts in enumerate(timestamps):
+            out = os.path.join(CLIPS_DIR, f"{sanitized}_s{line_num}_k{keyword_num}_part_{i+1}.mp4")
+            await log_msg("INFO", f"[{klabel}] Extracting clip {i+1}/3 at {ts}s → {out}")
+            ok = await download_4k_clip(url, ts, duration, out)
+            if ok:
+                succeeded += 1
+            else:
+                await log_msg("WARNING", f"[{klabel}] Clip {i+1} failed — skipping.")
+
+        if succeeded == 0:
+            await log_msg("ERROR", f"[{klabel}] All extractions failed. Source may be geo-blocked — try Internet Archive.")
+        else:
+            await log_msg("INFO", f"[{klabel}] Done: {succeeded}/3 clips saved.")
+
+    # --- Step 3: Clean up shared preview ---
     if os.path.exists(temp_file):
         os.remove(temp_file)
-        
-    # 4. Extract clips — filename encodes segment (line) and keyword so UI can group by URL
-    # Format: {prompt}_s{line_num}_k{keyword_num}_part_{n}.mp4
-    succeeded = 0
-    for i, ts in enumerate(timestamps):
-        output_file = os.path.join(CLIPS_DIR, f"{sanitized}_s{line_num}_k{keyword_num}_part_{i+1}.mp4")
-        await log_msg("INFO", f"[{label}] Extracting clip {i+1}/3 for '{prompt}' at {ts}s...")
-        ok = await download_4k_clip(url, ts, duration, output_file)
-        if ok:
-            succeeded += 1
-    
-    if succeeded == 0:
-        await log_msg("ERROR", f"[{label}] '{prompt}': all extractions failed — source may be geo-blocked. Try Internet Archive instead of YouTube.")
-    else:
-        await log_msg("INFO", f"[{label}] '{prompt}': {succeeded}/3 clips extracted successfully.")
+
+    await log_msg("INFO", f"=== [{label}] Finished ===")
+
 
 async def run_factory(feed_text, api_key):
     setup_logger()
     await log_msg("INFO", f"--- Pipeline Started at {datetime.now()} ---")
-        
+
     lines = [l.strip() for l in feed_text.strip().split('\n') if l.strip()]
-    tasks = []
-    
+
     for line_num, line in enumerate(lines, start=1):
-        # Format: URL | DURATION | prompt1, prompt2, prompt3
+        # Format: URL | DURATION | keyword1, keyword2, keyword3
         parts = [p.strip() for p in line.split('|')]
-        if len(parts) >= 3:
-            url, dur = parts[0], parts[1]
-            prompts_raw = parts[2]
-            # Support comma-separated prompts — each gets its own 3 clips, grouped under same line
-            prompts = [p.strip() for p in prompts_raw.split(',') if p.strip()]
-            try:
-                duration = int(dur)
-                for keyword_num, prompt in enumerate(prompts, start=1):
-                    tasks.append(process_entry(api_key, line_num, keyword_num, url, duration, prompt))
-            except ValueError:
-                await log_msg("ERROR", f"Invalid duration in line: {line}")
-                
-    if tasks:
-        await asyncio.gather(*tasks)
-        
+        if len(parts) < 3:
+            await log_msg("WARNING", f"Skipping malformed line {line_num}: '{line}'")
+            continue
+        url, dur_str = parts[0], parts[1]
+        prompts = [p.strip() for p in parts[2].split(',') if p.strip()]
+        try:
+            duration = int(dur_str)
+        except ValueError:
+            await log_msg("ERROR", f"Invalid duration '{dur_str}' on line {line_num} — skipping.")
+            continue
+        if not prompts:
+            await log_msg("WARNING", f"No keywords on line {line_num} — skipping.")
+            continue
+
+        await process_url_line(api_key, line_num, url, duration, prompts)
+
     await log_msg("INFO", "--- Batch processing complete ---")
     await log_msg("INFO", f"--- Pipeline Finished at {datetime.now()} ---")
 
