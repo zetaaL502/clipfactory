@@ -55,10 +55,11 @@ async def execute_fallback(output_path, duration, is_4k=True):
 async def download_low_res(url, output_path):
     """Download tiny version for AI analysis quickly"""
     ydl_opts = {
-        'format': 'worstvideo[height<=144]',
-        'outtemplate': output_path,
+        'format': 'best[height<=144]/worst', # More resilient matching
+        'outtmpl': output_path,
         'noplaylist': True,
         'quiet': True,
+        'no_warnings': True,
     }
     try:
         with YoutubeDL(ydl_opts) as ydl:
@@ -71,14 +72,20 @@ async def download_low_res(url, output_path):
 async def download_4k_clip(url, start_time, duration, output_path):
     """Accurately trim the high-res version from source, NO AUDIO"""
     # Using download_sections for accuracy
-    section = f"*{start_time}-{start_time + duration}"
     ydl_opts = {
-        'format': 'bestvideo[height<=2160]', # Video only
-        'download_sections': [{'title': 'section', 'parts': [{'start_time': start_time, 'end_time': start_time + duration}]}],
+        'format': 'bestvideo[height<=2160]/best[height<=2160]', # Better fallback
+        'download_sections': [{
+            'title': 'section',
+            'parts': [{
+                'start_time': start_time,
+                'end_time': start_time + duration
+            }]
+        }],
         'outtmpl': output_path,
         'merge_output_format': 'mp4',
         'noplaylist': True,
         'quiet': True,
+        'postprocessor_args': ['-an'], # Strictly remove audio
     }
     try:
         with YoutubeDL(ydl_opts) as ydl:
@@ -100,35 +107,42 @@ async def analyze_video(api_key, video_path, prompt):
         model = genai.GenerativeModel(MODEL_NAME)
         
         # Upload file to Gemini
-        file = genai.upload_file(path=video_path)
+        await log_msg("INFO", f"Uploading {video_path} to Gemini for analysis...")
+        myfile = genai.upload_file(path=video_path)
         
-        while file.state.name == "PROCESSING":
+        while myfile.state.name == "PROCESSING":
             await asyncio.sleep(2)
-            file = genai.get_file(file.name)
+            myfile = genai.get_file(myfile.name)
             
         system_instruction = (
             "You are a professional video editor. Identify 3 DISTINCT timestamps (start times in seconds) "
             f"in the video that best match the visual prompt: '{prompt}'. "
-            "The scenes must be at least 15 seconds apart if the video is long enough. "
-            "Return ONLY the numbers separated by commas (e.g., 12, 55, 120). No other text."
+            "Ensure the timestamps are spread out (e.g. beginning, middle, end if possible). "
+            "IMPORTANT: Return ONLY 3 numbers separated by commas. No text, no words."
         )
         
-        response = model.generate_content([file, prompt], generation_config={"candidate_count": 1}, system_instruction=system_instruction)
+        response = model.generate_content([myfile, f"Visual Prompt: {prompt}"], generation_config={"candidate_count": 1}, system_instruction=system_instruction)
         text = response.text.strip()
         await log_msg("INFO", f"Gemini suggested timestamps: {text}")
         
-        # Parse numbers
+        # Parse numbers more robustly
         timestamps = []
-        for t in text.split(','):
+        found = re.findall(r"(\d+(?:\.\d+)?)", text)
+        for val in found:
             try:
-                timestamps.append(float(t.strip()))
+                timestamps.append(float(val))
             except:
                 continue
                 
         # cleanup
-        genai.delete_file(file.name)
+        try:
+            genai.delete_file(myfile.name)
+        except:
+            pass
         
         if timestamps:
+            # Sort them so they are in order
+            timestamps.sort()
             return timestamps[:3]
         return [0, 5, 10]
     except Exception as e:
