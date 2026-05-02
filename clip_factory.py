@@ -219,17 +219,17 @@ async def analyze_video(api_key, video_path, prompt, clip_duration=10):
         return spread_timestamps(total_duration, clip_duration)
 
 
-async def process_entry(api_key, index, url, duration, prompt):
+async def process_entry(api_key, line_num, keyword_num, url, duration, prompt):
     sanitized = sanitize_filename(prompt)
-    temp_file = os.path.join(TEMP_DIR, f"temp_{index}.mp4")
+    temp_file = os.path.join(TEMP_DIR, f"temp_s{line_num}_k{keyword_num}.mp4")
     
-    await log_msg("INFO", f"--- Processing Entry {index}: {prompt} ---")
+    label = f"S{line_num}/K{keyword_num}"
+    await log_msg("INFO", f"--- [{label}] Processing '{prompt}' ---")
     
     # 1. Download low-res preview for Gemini analysis
     low_res_ok = await download_low_res(url, temp_file)
     if not low_res_ok:
-        # Try a quick test 4K download to see if source is accessible at all
-        await log_msg("WARNING", f"Low-res preview unavailable for entry {index} — attempting direct extraction anyway.")
+        await log_msg("WARNING", f"[{label}] Low-res preview unavailable — attempting direct extraction anyway.")
         
     # 2. Analyze (use temp file if it exists, else spread evenly)
     if os.path.exists(temp_file):
@@ -241,19 +241,20 @@ async def process_entry(api_key, index, url, duration, prompt):
     if os.path.exists(temp_file):
         os.remove(temp_file)
         
-    # 4. Extract clips — only save ones that actually download successfully
+    # 4. Extract clips — filename encodes segment (line) and keyword so UI can group by URL
+    # Format: {prompt}_s{line_num}_k{keyword_num}_part_{n}.mp4
     succeeded = 0
     for i, ts in enumerate(timestamps):
-        output_file = os.path.join(CLIPS_DIR, f"{sanitized}_{index}_part_{i+1}.mp4")
-        await log_msg("INFO", f"Extracting clip {i+1}/3 for '{prompt}' at {ts}s...")
+        output_file = os.path.join(CLIPS_DIR, f"{sanitized}_s{line_num}_k{keyword_num}_part_{i+1}.mp4")
+        await log_msg("INFO", f"[{label}] Extracting clip {i+1}/3 for '{prompt}' at {ts}s...")
         ok = await download_4k_clip(url, ts, duration, output_file)
         if ok:
             succeeded += 1
     
     if succeeded == 0:
-        await log_msg("ERROR", f"Entry {index} ('{prompt}'): all clip extractions failed — source may be geo-blocked or unavailable on this server. Try Internet Archive links instead of YouTube.")
+        await log_msg("ERROR", f"[{label}] '{prompt}': all extractions failed — source may be geo-blocked. Try Internet Archive instead of YouTube.")
     else:
-        await log_msg("INFO", f"Entry {index} ('{prompt}'): {succeeded}/3 clips extracted successfully.")
+        await log_msg("INFO", f"[{label}] '{prompt}': {succeeded}/3 clips extracted successfully.")
 
 async def run_factory(feed_text, api_key):
     setup_logger()
@@ -262,20 +263,18 @@ async def run_factory(feed_text, api_key):
     lines = [l.strip() for l in feed_text.strip().split('\n') if l.strip()]
     tasks = []
     
-    task_index = 1
-    for i, line in enumerate(lines):
+    for line_num, line in enumerate(lines, start=1):
         # Format: URL | DURATION | prompt1, prompt2, prompt3
         parts = [p.strip() for p in line.split('|')]
         if len(parts) >= 3:
             url, dur = parts[0], parts[1]
             prompts_raw = parts[2]
-            # Support comma-separated prompts — each gets its own 3 clips
+            # Support comma-separated prompts — each gets its own 3 clips, grouped under same line
             prompts = [p.strip() for p in prompts_raw.split(',') if p.strip()]
             try:
                 duration = int(dur)
-                for prompt in prompts:
-                    tasks.append(process_entry(api_key, task_index, url, duration, prompt))
-                    task_index += 1
+                for keyword_num, prompt in enumerate(prompts, start=1):
+                    tasks.append(process_entry(api_key, line_num, keyword_num, url, duration, prompt))
             except ValueError:
                 await log_msg("ERROR", f"Invalid duration in line: {line}")
                 

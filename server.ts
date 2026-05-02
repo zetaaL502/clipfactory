@@ -21,6 +21,9 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Clear log on every server start so refresh = fresh slate
+  fs.writeFileSync(LOG_FILE, '');
+
   // API Routes
   app.get('/api/pipeline-status', (req, res) => {
     if (!fs.existsSync(LOG_FILE)) {

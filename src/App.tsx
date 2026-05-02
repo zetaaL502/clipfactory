@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Play, 
   FileText, 
@@ -29,27 +29,16 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-  const [modalClip, setModalClip] = useState<string | null>(null);
-  const modalVideoRef = useRef<HTMLVideoElement>(null);
+  const [playingClip, setPlayingClip] = useState<string | null>(null);
 
-  // Grouped clips logic
+  // Group clips by line/URL number encoded as _s{N}_ in the filename
   const groupedClips = React.useMemo(() => {
     const groups: Record<string, string[]> = {};
     clips.forEach(clip => {
-      // Filename format: prompt_index_part_X.mp4
-      const parts = clip.split('_');
-      // The index is before "_part_"
-      let index = 'unknown';
-      const partIdx = clip.lastIndexOf('_part_');
-      if (partIdx !== -1) {
-        const sub = clip.substring(0, partIdx);
-        const lastUnderscore = sub.lastIndexOf('_');
-        if (lastUnderscore !== -1) {
-          index = sub.substring(lastUnderscore + 1);
-        }
-      }
-      if (!groups[index]) groups[index] = [];
-      groups[index].push(clip);
+      const m = clip.match(/_s(\d+)_/);
+      const key = m ? m[1] : 'other';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(clip);
     });
     return groups;
   }, [clips]);
@@ -530,61 +519,87 @@ export default function App() {
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {groupClips.sort().map((clip, i) => (
+                        {groupClips.sort().map((clip, i) => {
+                          const isPlaying = playingClip === clip;
+                          const keyword = clip.match(/_k(\d+)_/)?.[1];
+                          const part = clip.match(/part_(\d+)/)?.[1];
+                          const promptName = clip.replace(/_s\d+_k\d+_part_\d+\.mp4$/, '').replace(/_/g, ' ').trim();
+                          return (
                           <motion.div
                             key={clip}
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ delay: i * 0.05 }}
-                            className={`group relative bg-zinc-900 border ${selectedClips.has(clip) ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-zinc-800'} rounded-2xl overflow-hidden hover:border-blue-500/50 transition-all shadow-xl`}
+                            className={`group relative bg-zinc-900 border ${selectedClips.has(clip) ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-zinc-800'} rounded-2xl overflow-hidden hover:border-zinc-700 transition-all shadow-xl`}
                           >
-                            <div className="absolute top-3 left-3 z-20">
-                              <input
-                                type="checkbox"
-                                checked={selectedClips.has(clip)}
-                                onChange={() => toggleClip(clip)}
-                                className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-950 transition-all cursor-pointer"
-                              />
-                            </div>
-                            <div
-                              className="aspect-video bg-zinc-800 flex items-center justify-center relative group/video cursor-pointer"
-                              onClick={() => setModalClip(clip)}
-                            >
-                              <video
-                                src={`/clips/${clip}`}
-                                className="absolute inset-0 w-full h-full object-cover"
-                                muted
-                                playsInline
-                                preload="metadata"
-                                onMouseOver={e => e.currentTarget.play()}
-                                onMouseOut={e => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center z-10 opacity-0 group-hover/video:opacity-100 transition-opacity duration-200">
-                                <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center shadow-2xl">
-                                  <Play className="w-6 h-6 text-white fill-white ml-1" />
-                                </div>
+                            {!isPlaying && (
+                              <div className="absolute top-3 left-3 z-20" onClick={e => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedClips.has(clip)}
+                                  onChange={() => toggleClip(clip)}
+                                  className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-950 transition-all cursor-pointer"
+                                />
                               </div>
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover/video:opacity-100 transition-opacity duration-200 z-[5]" />
-                            </div>
-                            <div className="p-4 flex items-center justify-between gap-4">
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-white truncate" title={clip}>{clip.substring(0, clip.lastIndexOf('_')).substring(0, clip.lastIndexOf('_')) || clip}</p>
-                                <div className="flex items-center gap-1.5 mt-1">
-                                  <Clock className="w-3 h-3 text-zinc-500" />
-                                  <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-tighter">Part {clip.match(/part_(\d+)/)?.[1] || '?'}</p>
+                            )}
+
+                            <div className="aspect-video bg-black relative group/video">
+                              {isPlaying ? (
+                                <>
+                                  <video
+                                    key={clip}
+                                    src={`/clips/${clip}`}
+                                    className="w-full h-full"
+                                    controls
+                                    autoPlay
+                                    playsInline
+                                  />
+                                  <button
+                                    onClick={() => setPlayingClip(null)}
+                                    className="absolute top-2 right-2 z-20 p-1 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <div
+                                  className="absolute inset-0 cursor-pointer"
+                                  onClick={() => setPlayingClip(clip)}
+                                >
+                                  <video
+                                    src={`/clips/${clip}`}
+                                    className="w-full h-full object-cover"
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                    onMouseOver={e => e.currentTarget.play()}
+                                    onMouseOut={e => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                                  />
+                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/video:opacity-100 transition-opacity duration-150">
+                                    <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center">
+                                      <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+                                    </div>
+                                  </div>
                                 </div>
+                              )}
+                            </div>
+
+                            <div className="p-3 flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-white truncate capitalize" title={promptName}>{promptName}</p>
+                                <p className="text-[10px] text-zinc-500 font-mono mt-0.5">keyword {keyword} · part {part}</p>
                               </div>
                               <a
                                 href={`/clips/${clip}`}
                                 download={clip}
-                                onClick={e => e.stopPropagation()}
-                                className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-all"
+                                className="shrink-0 p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-all"
                               >
-                                <Download className="w-4 h-4" />
+                                <Download className="w-3.5 h-3.5" />
                               </a>
                             </div>
                           </motion.div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   ))}
@@ -742,66 +757,6 @@ export default function App() {
         }
       `}</style>
 
-      {/* Video Modal */}
-      <AnimatePresence>
-        {modalClip && (
-          <motion.div
-            key="modal-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4"
-            onClick={() => { setModalClip(null); }}
-          >
-            <motion.div
-              key="modal-content"
-              initial={{ opacity: 0, scale: 0.92, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.92, y: 20 }}
-              transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
-              className="relative w-full max-w-4xl bg-zinc-900 rounded-2xl overflow-hidden shadow-2xl border border-zinc-700"
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Close + download bar */}
-              <div className="flex items-center justify-between px-5 py-3 bg-zinc-900 border-b border-zinc-800">
-                <p className="text-sm font-medium text-zinc-300 truncate max-w-[70%]" title={modalClip}>
-                  {modalClip}
-                </p>
-                <div className="flex items-center gap-2">
-                  <a
-                    href={`/clips/${modalClip}`}
-                    download={modalClip}
-                    className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-lg transition-all"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Download
-                  </a>
-                  <button
-                    onClick={() => setModalClip(null)}
-                    className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-all"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Video player */}
-              <div className="bg-black aspect-video">
-                <video
-                  ref={modalVideoRef}
-                  key={modalClip}
-                  src={`/clips/${modalClip}`}
-                  className="w-full h-full"
-                  controls
-                  autoPlay
-                  playsInline
-                />
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
