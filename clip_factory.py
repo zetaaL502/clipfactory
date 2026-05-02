@@ -43,9 +43,12 @@ async def execute_fallback(output_path, duration, is_4k=True):
     size = "3840x2160" if is_4k else "256x144"
     await log_msg("WARNING", f"Generating silent black fallback for {output_path} (Source blocked/unreachable)")
     
+    import imageio_ffmpeg
+    ffmpeg_cmd = imageio_ffmpeg.get_ffmpeg_exe()
+    
     # Just a pure black screen, no audio, very small file size
     cmd = [
-        "ffmpeg", "-y",
+        ffmpeg_cmd, "-y",
         "-f", "lavfi", "-i", f"color=c=black:s={size}:d={duration}:r=30",
         "-c:v", "libx264",
         "-t", str(duration),
@@ -66,7 +69,6 @@ async def download_low_res(url, output_path):
         'quiet': True,
         'no_warnings': True,
         # LOCAL RUN FIX: Use browser cookies to skip 403 Forbidden blocks
-        'cookiesfrombrowser': ('chrome',), 
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
     try:
@@ -79,21 +81,21 @@ async def download_low_res(url, output_path):
 
 async def download_4k_clip(url, start_time, duration, output_path):
     """Accurately trim the high-res version from source, NO AUDIO"""
+    def get_ranges(info_dict, ydl):
+        return [{'start_time': start_time, 'end_time': start_time + duration}]
+        
+    import imageio_ffmpeg
+    ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+        
     ydl_opts = {
         'format': 'bestvideo[height<=2160]/best[height<=2160]',
-        'download_sections': [{
-            'title': 'section',
-            'parts': [{
-                'start_time': start_time,
-                'end_time': start_time + duration
-            }]
-        }],
+        'download_ranges': get_ranges,
         'outtmpl': output_path,
         'merge_output_format': 'mp4',
         'noplaylist': True,
+        'ffmpeg_location': ffmpeg_path,
         'quiet': True,
         # LOCAL RUN FIX: Use browser cookies to skip 403 Forbidden blocks
-        'cookiesfrombrowser': ('chrome',),
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
     try:
@@ -123,7 +125,11 @@ async def analyze_video(api_key, video_path, prompt):
             return [2, 12, 22]
 
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(MODEL_NAME)
+        system_instruction = (
+            "You are a professional video editor. Identify 3 DISTINCT timestamps (start times in seconds) "
+            f"in the video that match: '{prompt}'. Return ONLY 3 numbers separated by commas."
+        )
+        model = genai.GenerativeModel(MODEL_NAME, system_instruction=system_instruction)
         
         await log_msg("INFO", f"Uploading {video_path} to Gemini...")
         # Use the explicit function from the module
@@ -133,12 +139,7 @@ async def analyze_video(api_key, video_path, prompt):
             await asyncio.sleep(2)
             myfile = genai.get_file(myfile.name)
             
-        system_instruction = (
-            "You are a professional video editor. Identify 3 DISTINCT timestamps (start times in seconds) "
-            f"in the video that match: '{prompt}'. Return ONLY 3 numbers separated by commas."
-        )
-        
-        response = model.generate_content([myfile, f"Prompt: {prompt}"], generation_config={"candidate_count": 1}, system_instruction=system_instruction)
+        response = model.generate_content([myfile, f"Prompt: {prompt}"], generation_config={"candidate_count": 1})
         text = response.text.strip()
         
         timestamps = []

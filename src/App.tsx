@@ -180,7 +180,6 @@ export default function App() {
 
   const deleteSelected = async () => {
     if (selectedClips.size === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedClips.size} clips?`)) return;
 
     setIsDeleting(true);
     try {
@@ -247,7 +246,7 @@ export default function App() {
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
               <Video className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-lg font-semibold tracking-tight text-white">Clip Factory</h1>
+            <h1 className="text-lg font-semibold tracking-tight text-emerald-400">Clip Factory ⚡️ V2</h1>
           </div>
           <div className="flex items-center gap-1 bg-zinc-800 p-1 rounded-xl overflow-x-auto custom-scrollbar">
             {[
@@ -478,7 +477,7 @@ export default function App() {
                         <button
                           onClick={deleteSelected}
                           disabled={isDeleting}
-                          className="flex items-center gap-2 bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-500/20 px-4 py-2 rounded-xl transition-all active:scale-95 text-xs font-bold"
+                          className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white border border-emerald-500 px-4 py-2 rounded-xl transition-all active:scale-95 text-xs font-bold shadow-lg shadow-emerald-900/20"
                         >
                           <Trash2 className="w-4 h-4" />
                           DELETE ({selectedClips.size})
@@ -517,7 +516,7 @@ export default function App() {
                     <div key={index} className="space-y-6">
                       <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
                         <div className="flex items-center gap-3">
-                          <div className="bg-blue-600 w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-blue-900/20">
+                          <div className="bg-purple-600 w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-purple-900/20">
                             {index !== 'unknown' ? index : '?'}
                           </div>
                           <div>
