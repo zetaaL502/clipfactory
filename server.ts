@@ -160,20 +160,15 @@ asyncio.run(main())
 
   app.post('/api/download-zip', (req, res) => {
     const files = req.body.files || [];
-    
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename=selected_clips.zip');
-    
     const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', (err) => { console.error('[zip] archive error:', err); if (!res.headersSent) res.status(500).end(); });
     archive.pipe(res);
-    
     for (const file of files) {
-      const filePath = path.join(CLIPS_DIR, file);
-      if (fs.existsSync(filePath)) {
-        archive.file(filePath, { name: file });
-      }
+      const filePath = path.join(CLIPS_DIR, path.basename(file));
+      if (fs.existsSync(filePath)) archive.file(filePath, { name: path.basename(file) });
     }
-    
     archive.finalize();
   });
 
@@ -195,17 +190,13 @@ asyncio.run(main())
   app.get('/api/download-all', (req, res) => {
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename=all_clips.zip');
-    
     const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', (err) => { console.error('[zip] archive error:', err); if (!res.headersSent) res.status(500).end(); });
     archive.pipe(res);
-    
     if (fs.existsSync(CLIPS_DIR)) {
       const files = fs.readdirSync(CLIPS_DIR).filter(f => f.endsWith('.mp4'));
-      for (const file of files) {
-        archive.file(path.join(CLIPS_DIR, file), { name: file });
-      }
+      for (const file of files) archive.file(path.join(CLIPS_DIR, file), { name: file });
     }
-    
     archive.finalize();
   });
 
@@ -319,54 +310,58 @@ asyncio.run(main())
   });
 
   app.post('/api/picker/extract-zip', async (req, res) => {
-    const { jobId, selections, duration, credit } = req.body;
-    if (!jobId || !Array.isArray(selections) || selections.length === 0) {
-      return res.status(400).json({ error: 'Invalid request' });
-    }
-    const jobDir = path.join(PICKER_DIR, path.basename(jobId));
-    const clipsDir = path.join(jobDir, 'clips');
-    fs.mkdirSync(clipsDir, { recursive: true });
-
-    const extractedPaths: { filePath: string; name: string }[] = [];
-
-    for (const sel of selections) {
-      const videoStatusPath = path.join(jobDir, String(sel.videoIndex), 'status.json');
-      if (!fs.existsSync(videoStatusPath)) continue;
-      const videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8'));
-      const url = videoStatus.url;
-      if (!url) continue;
-
-      const clipName = `clip_v${sel.videoIndex}_t${sel.timestamp}.mp4`;
-      const clipPath = path.join(clipsDir, clipName);
-
-      await new Promise<void>(resolve => {
-        // Per-video credit overrides the global fallback credit
-        const effectiveCredit = videoStatus.credit || credit || null;
-        const args = ['picker_extract.py', url, String(sel.timestamp), String(duration || 10), clipPath];
-        if (effectiveCredit) args.push(effectiveCredit);
-        const proc = spawn('python3', args);
-        proc.stdout.on('data', d => console.log('[extract]', d.toString()));
-        proc.stderr.on('data', d => console.error('[extract]', d.toString()));
-        proc.on('close', () => resolve());
-      });
-
-      if (fs.existsSync(clipPath)) {
-        extractedPaths.push({ filePath: clipPath, name: clipName });
+    try {
+      const { jobId, selections, duration, credit } = req.body;
+      if (!jobId || !Array.isArray(selections) || selections.length === 0) {
+        return res.status(400).json({ error: 'Invalid request' });
       }
-    }
+      const jobDir = path.join(PICKER_DIR, path.basename(jobId));
+      const clipsDir = path.join(jobDir, 'clips');
+      fs.mkdirSync(clipsDir, { recursive: true });
 
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', 'attachment; filename=picker_clips.zip');
-    const archive = archiver('zip', { zlib: { level: 6 } });
-    archive.pipe(res);
-    for (const c of extractedPaths) {
-      archive.file(c.filePath, { name: c.name });
+      const extractedPaths: { filePath: string; name: string }[] = [];
+
+      for (const sel of selections) {
+        const videoStatusPath = path.join(jobDir, String(sel.videoIndex), 'status.json');
+        if (!fs.existsSync(videoStatusPath)) continue;
+        let videoStatus: Record<string, unknown>;
+        try { videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8')); } catch { continue; }
+        const url = videoStatus.url as string | undefined;
+        if (!url) continue;
+
+        const clipName = `clip_v${sel.videoIndex}_t${sel.timestamp}.mp4`;
+        const clipPath = path.join(clipsDir, clipName);
+
+        await new Promise<void>(resolve => {
+          const effectiveCredit = (videoStatus.credit as string | null) || credit || null;
+          const args = ['picker_extract.py', url, String(sel.timestamp), String(duration || 10), clipPath];
+          if (effectiveCredit) args.push(effectiveCredit);
+          const proc = spawn('python3', args);
+          proc.stdout.on('data', d => console.log('[extract]', d.toString()));
+          proc.stderr.on('data', d => console.error('[extract]', d.toString()));
+          proc.on('close', () => resolve());
+          proc.on('error', () => resolve());
+        });
+
+        if (fs.existsSync(clipPath)) {
+          extractedPaths.push({ filePath: clipPath, name: clipName });
+        }
+      }
+
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename=picker_clips.zip');
+      const archive = archiver('zip', { zlib: { level: 6 } });
+      archive.on('error', (err) => { console.error('[zip] archive error:', err); if (!res.headersSent) res.status(500).end(); });
+      archive.on('end', () => {
+        try { fs.rmSync(jobDir, { recursive: true, force: true }); } catch {}
+      });
+      archive.pipe(res);
+      for (const c of extractedPaths) archive.file(c.filePath, { name: c.name });
+      archive.finalize();
+    } catch (err) {
+      console.error('[extract-zip] unhandled error:', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Extraction failed' });
     }
-    // Delete job temp folder after ZIP is fully sent
-    archive.on('end', () => {
-      try { fs.rmSync(jobDir, { recursive: true, force: true }); } catch {}
-    });
-    archive.finalize();
   });
   // ── End Picker Routes ──────────────────────────────────────────────
 
@@ -398,4 +393,14 @@ asyncio.run(main())
   });
 }
 
-startServer();
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] unhandledRejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[server] uncaughtException:', err);
+});
+
+startServer().catch(err => {
+  console.error('[server] startup failed:', err);
+  process.exit(1);
+});
