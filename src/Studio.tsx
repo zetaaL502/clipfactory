@@ -8,9 +8,40 @@ import {
 
 interface Thumbnail { file: string; timestamp: number; label: string; }
 interface VideoData {
-  index: number; url: string;
+  index: number; url: string; credit?: string | null;
   status: 'queued' | 'downloading' | 'extracting' | 'done' | 'error';
   thumbnails: Thumbnail[]; duration?: number; error?: string;
+}
+
+// Parse a URL line that may have "@credit" appended, e.g. "https://... @BBC"
+function parseUrlLine(line: string): { url: string; credit: string | null } {
+  const m = line.trim().match(/^(.+?)\s+(@\S+)\s*$/);
+  return m ? { url: m[1].trim(), credit: m[2] } : { url: line.trim(), credit: null };
+}
+
+// Parse free-text duration: "30", "30s", "2min", "2m30s", "1:30"
+function parseDurationSecs(val: string): number {
+  val = val.trim().toLowerCase();
+  // MM:SS or HH:MM:SS
+  const colonMatch = val.match(/^(\d+):(\d{2})(?::(\d{2}))?$/);
+  if (colonMatch) {
+    const [, a, b, c] = colonMatch;
+    return c !== undefined ? parseInt(a) * 3600 + parseInt(b) * 60 + parseInt(c) : parseInt(a) * 60 + parseInt(b);
+  }
+  // Xm Ys combined, e.g. "2m30s"
+  const combMatch = val.match(/^(?:(\d+)\s*m(?:in)?)?(?:\s*(\d+)\s*s(?:ec)?)?$/);
+  if (combMatch && (combMatch[1] || combMatch[2])) {
+    return (parseInt(combMatch[1] || '0') * 60) + parseInt(combMatch[2] || '0');
+  }
+  // Xmin / Xm
+  const minMatch = val.match(/^(\d+(?:\.\d+)?)\s*m(?:in(?:utes?)?)?$/);
+  if (minMatch) return Math.round(parseFloat(minMatch[1]) * 60);
+  // Xs / Xsec
+  const secMatch = val.match(/^(\d+(?:\.\d+)?)\s*s(?:ec(?:onds?)?)?$/);
+  if (secMatch) return Math.round(parseFloat(secMatch[1]));
+  // plain number
+  const n = parseInt(val, 10);
+  return isNaN(n) || n < 1 ? 30 : n;
 }
 
 const PAGE_SIZE = 4;
@@ -175,15 +206,18 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
   }, [jobId, isLoading]);
 
   const handleBrowse = async () => {
-    const urlList = urls.trim().split('\n').map(u => u.trim()).filter(Boolean);
-    if (!urlList.length) return;
+    const rawLines = urls.trim().split('\n').map(u => u.trim()).filter(Boolean);
+    if (!rawLines.length) return;
+    const parsed = rawLines.map(parseUrlLine);
+    const urlList = parsed.map(p => p.url);
+    const urlCredits = parsed.map(p => p.credit);
     setPickerStatus(null); setIsLoading(true);
     setSelections(new Set()); setThumbStart({}); setThumbCount({}); setThumbSeekVal({}); setThumbSeekErr({});
     setVideos([]); setJobId(null); setPlayingKey(null);
     try {
       const res = await fetch('/api/picker/start', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls: urlList, duration: parseInt(duration) || 30, credit: credit || null })
+        body: JSON.stringify({ urls: urlList, urlCredits, duration: parseDurationSecs(duration), credit: credit || null })
       });
       const data = await res.json();
       setJobId(data.jobId);
@@ -245,7 +279,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
       const sels = Array.from(selections).map(k => { const [vi, ts] = k.split(':').map(Number); return { videoIndex: vi, timestamp: ts }; });
       const res = await fetch('/api/picker/extract-zip', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId, selections: sels, duration: parseInt(duration) || 30, credit: credit || null })
+        body: JSON.stringify({ jobId, selections: sels, duration: parseDurationSecs(duration), credit: credit || null })
       });
       if (!res.ok) throw new Error('Extraction failed');
       const blob = await res.blob();
@@ -260,7 +294,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
     } finally { setIsExtracting(false); }
   };
 
-  const clipDur = parseInt(duration) || 30;
+  const clipDur = parseDurationSecs(duration);
   const segmentSelected = (video: VideoData) => video.thumbnails.filter(t => selections.has(selKey(video.index, t.timestamp))).length;
 
   return (
@@ -271,12 +305,12 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
             <Link className="w-4 h-4 text-zinc-500" /> Video URLs
-            <span className="text-zinc-600 font-normal text-xs">(one per line — YouTube, Vimeo, archive.org, anything yt-dlp supports)</span>
+            <span className="text-zinc-600 font-normal text-xs">(one per line — add <span className="font-mono text-zinc-500">@credit</span> after any URL to give it its own watermark)</span>
           </label>
           <textarea
             value={urls}
             onChange={e => setUrls(e.target.value)}
-            placeholder={"https://www.youtube.com/watch?v=...\nhttps://archive.org/details/...\nhttps://vimeo.com/..."}
+            placeholder={"https://archive.org/details/... @BBC\nhttps://archive.org/details/... @CNN\nhttps://vimeo.com/..."}
             rows={4}
             className="w-full bg-zinc-950 border border-zinc-700 rounded-xl p-4 font-mono text-sm focus:ring-2 focus:ring-blue-500/50 outline-none resize-none text-zinc-200 placeholder:text-zinc-600"
           />
@@ -287,24 +321,34 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
             <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
               <Clock className="w-3.5 h-3.5" /> Clip Duration
             </label>
-            <select value={duration} onChange={e => setDuration(e.target.value)}
-              className="w-32 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/50 text-zinc-200">
-              <option value="8">8 sec</option>
-              <option value="15">15 sec</option>
-              <option value="30">30 sec</option>
-              <option value="45">45 sec</option>
-              <option value="60">1 min</option>
-              <option value="90">1 min 30s</option>
-              <option value="120">2 min</option>
-              <option value="180">3 min</option>
-              <option value="300">5 min</option>
-              <option value="600">10 min</option>
-            </select>
+            <input
+              type="text"
+              list="duration-suggestions"
+              value={duration}
+              onChange={e => setDuration(e.target.value)}
+              placeholder="e.g. 30s, 2min, 1:30"
+              className="w-36 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/50 text-zinc-200 placeholder:text-zinc-600"
+            />
+            <datalist id="duration-suggestions">
+              <option value="8" />
+              <option value="15" />
+              <option value="30" />
+              <option value="45" />
+              <option value="1min" />
+              <option value="1m30s" />
+              <option value="2min" />
+              <option value="3min" />
+              <option value="5min" />
+              <option value="10min" />
+              <option value="15min" />
+              <option value="20min" />
+              <option value="30min" />
+            </datalist>
           </div>
 
           <div className="space-y-1.5 flex-1 min-w-44">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-              <AtSign className="w-3.5 h-3.5" /> Credit Watermark <span className="normal-case font-normal">(optional)</span>
+              <AtSign className="w-3.5 h-3.5" /> Default Credit <span className="normal-case font-normal">(fallback if URL has none)</span>
             </label>
             <input type="text" value={credit} onChange={e => setCredit(e.target.value)}
               placeholder="@yourchannel"
@@ -480,6 +524,9 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                   <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-800 flex-wrap">
                     <Film className="w-4 h-4 text-zinc-500 shrink-0" />
                     <span className="text-sm text-zinc-300 font-mono truncate flex-1 min-w-0" title={video.url}>{shortUrl(video.url)}</span>
+                    {video.credit && (
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">{video.credit}</span>
+                    )}
                     {statusBadge(video.status)}
                     {video.duration && (
                       <span className="text-xs text-zinc-600 shrink-0">

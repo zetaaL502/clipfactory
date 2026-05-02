@@ -43,7 +43,7 @@ async def ensure_mp4(ffmpeg, src_path, dst_path):
     await proc.communicate()
     return os.path.exists(dst_path) and os.path.getsize(dst_path) > 1000
 
-async def process_video(job_dir, video_index, url, clip_duration=30):
+async def process_video(job_dir, video_index, url, clip_duration=30, credit=None):
     video_dir = os.path.join(job_dir, str(video_index))
     os.makedirs(video_dir, exist_ok=True)
     thumb_dir = os.path.join(video_dir, "thumbs")
@@ -121,7 +121,7 @@ async def process_video(job_dir, video_index, url, clip_duration=30):
         return
 
     duration = await get_duration(video_path)
-    write_status(status_path, {"status": "extracting", "url": url, "duration": duration, "thumbnails": []})
+    write_status(status_path, {"status": "extracting", "url": url, "duration": duration, "credit": credit, "thumbnails": []})
 
     THUMB_INTERVAL = max(clip_duration, 10)
 
@@ -162,6 +162,7 @@ async def process_video(job_dir, video_index, url, clip_duration=30):
     write_status(status_path, {
         "status": "done",
         "url": url,
+        "credit": credit,
         "duration": duration,
         "thumbInterval": THUMB_INTERVAL,
         "thumbStartOffset": start_offset,
@@ -176,11 +177,15 @@ async def main():
         data = json.load(f)
 
     urls = data["urls"]
+    url_credits = data.get("urlCredits", [])
     clip_duration = int(data.get("duration", 30))
 
     write_status(os.path.join(job_dir, "status.json"), {"status": "running", "total": len(urls)})
 
-    tasks = [process_video(job_dir, i, url, clip_duration) for i, url in enumerate(urls)]
+    tasks = [
+        process_video(job_dir, i, url, clip_duration, credit=url_credits[i] if i < len(url_credits) else None)
+        for i, url in enumerate(urls)
+    ]
     await asyncio.gather(*tasks)
 
     write_status(os.path.join(job_dir, "status.json"), {"status": "done", "total": len(urls)})

@@ -218,14 +218,14 @@ asyncio.run(main())
 
   // ── Picker Routes ─────────────────────────────────────────────────
   app.post('/api/picker/start', (req, res) => {
-    const { urls, duration, credit } = req.body;
+    const { urls, urlCredits, duration, credit } = req.body;
     if (!urls || !Array.isArray(urls) || urls.length === 0) {
       return res.status(400).json({ error: 'No URLs provided' });
     }
     const jobId = randomUUID();
     const jobDir = path.join(PICKER_DIR, jobId);
     fs.mkdirSync(jobDir, { recursive: true });
-    fs.writeFileSync(path.join(jobDir, 'urls.json'), JSON.stringify({ urls, duration, credit }));
+    fs.writeFileSync(path.join(jobDir, 'urls.json'), JSON.stringify({ urls, urlCredits: urlCredits || [], duration, credit }));
 
     const proc = spawn('python3', ['picker.py', jobDir]);
     proc.stdout.on('data', d => console.log('[picker]', d.toString()));
@@ -340,8 +340,10 @@ asyncio.run(main())
       const clipPath = path.join(clipsDir, clipName);
 
       await new Promise<void>(resolve => {
+        // Per-video credit overrides the global fallback credit
+        const effectiveCredit = videoStatus.credit || credit || null;
         const args = ['picker_extract.py', url, String(sel.timestamp), String(duration || 10), clipPath];
-        if (credit) args.push(credit);
+        if (effectiveCredit) args.push(effectiveCredit);
         const proc = spawn('python3', args);
         proc.stdout.on('data', d => console.log('[extract]', d.toString()));
         proc.stderr.on('data', d => console.error('[extract]', d.toString()));
