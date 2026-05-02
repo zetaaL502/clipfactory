@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Film, Link, Clock, AtSign, Download, Loader2, AlertCircle,
-  CheckCircle2, X, Play, ChevronRight, Power, ChevronDown, ChevronUp, Zap
+  CheckCircle2, X, Play, Square, ChevronRight, Power, ChevronDown, ChevronUp, Zap
 } from 'lucide-react';
 
 interface Thumbnail { file: string; timestamp: number; label: string; }
@@ -19,6 +19,12 @@ function shortUrl(url: string) {
   catch { return url.slice(0, 55) + (url.length > 55 ? '…' : ''); }
 }
 
+function readableDuration(secs: number) {
+  if (secs < 60) return `${secs} sec`;
+  if (secs % 60 === 0) return `${secs / 60} min`;
+  return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+}
+
 function statusBadge(status: VideoData['status']) {
   const map: Record<string, { label: string; cls: string }> = {
     queued:      { label: 'Queued',      cls: 'bg-zinc-700 text-zinc-300' },
@@ -31,35 +37,124 @@ function statusBadge(status: VideoData['status']) {
   return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider ${s.cls}`}>{s.label}</span>;
 }
 
+function ThumbCard({
+  thumb, videoIndex, jobId, clipDuration,
+  selected, onToggle, playing, onPlay, onStop
+}: {
+  thumb: Thumbnail; videoIndex: number; jobId: string; clipDuration: number;
+  selected: boolean; onToggle: () => void;
+  playing: boolean; onPlay: () => void; onStop: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !playing) return;
+    v.currentTime = thumb.timestamp;
+    v.play().catch(() => {});
+
+    const check = () => {
+      if (v.currentTime >= thumb.timestamp + clipDuration) {
+        v.pause(); onStop();
+      }
+    };
+    v.addEventListener('timeupdate', check);
+    return () => v.removeEventListener('timeupdate', check);
+  }, [playing, thumb.timestamp, clipDuration, onStop]);
+
+  useEffect(() => {
+    if (!playing) { const v = videoRef.current; if (v) { v.pause(); v.currentTime = thumb.timestamp; } }
+  }, [playing, thumb.timestamp]);
+
+  return (
+    <div className={`relative rounded-xl overflow-hidden border-2 transition-all cursor-pointer
+      ${selected ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-zinc-700 hover:border-zinc-500'}
+      ${playing ? 'border-emerald-500 ring-2 ring-emerald-500/20' : ''}`}
+    >
+      {/* Duration badge at top */}
+      <div className={`absolute top-0 inset-x-0 z-10 text-center py-1 text-[11px] font-bold
+        ${playing ? 'bg-emerald-600/90 text-white' : selected ? 'bg-blue-600/80 text-white' : 'bg-black/60 text-zinc-200'}`}>
+        {readableDuration(clipDuration)} clip
+      </div>
+
+      {/* Video element (always rendered, src only when playing to avoid preloading all) */}
+      {playing && (
+        <video
+          ref={videoRef}
+          src={`/api/picker/video/${jobId}/${videoIndex}`}
+          className="w-full aspect-video object-cover bg-black"
+          playsInline
+          onEnded={onStop}
+        />
+      )}
+
+      {/* Thumbnail image (shown when not playing) */}
+      {!playing && (
+        <img
+          src={`/api/picker/thumb/${jobId}/${videoIndex}/${thumb.file}`}
+          alt={`from ${thumb.label}`}
+          className="w-full aspect-video object-cover"
+          loading="lazy"
+        />
+      )}
+
+      {/* Overlay: click center to play/stop */}
+      <div
+        className="absolute inset-0 flex items-center justify-center"
+        onClick={playing ? onStop : onPlay}
+      >
+        {playing ? (
+          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+            <Square className="w-4 h-4 text-white fill-white" />
+          </div>
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+            <Play className="w-4 h-4 text-white fill-white ml-0.5" />
+          </div>
+        )}
+      </div>
+
+      {/* Checkbox selector (top-left, stops propagation so it doesn't trigger play) */}
+      <div className="absolute top-6 left-2 z-20" onClick={e => { e.stopPropagation(); onToggle(); }}>
+        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all cursor-pointer
+          ${selected ? 'bg-blue-500 border-blue-400' : 'bg-black/60 border-zinc-500 hover:border-white'}`}>
+          {selected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+        </div>
+      </div>
+
+      {/* Timestamp label at bottom */}
+      <div className={`absolute bottom-0 inset-x-0 py-1 text-center text-[10px] font-mono
+        ${selected ? 'bg-blue-600/70 text-white' : 'bg-black/60 text-zinc-400'}`}>
+        from {thumb.label}
+      </div>
+    </div>
+  );
+}
+
 export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void }) {
-  // ── shared inputs ──
   const [urls, setUrls] = useState('');
   const [duration, setDuration] = useState('30');
   const [credit, setCredit] = useState('');
 
-  // ── batch mode ──
   const [showBatch, setShowBatch] = useState(false);
   const [feed, setFeed] = useState('');
   const [isBatchRunning, setIsBatchRunning] = useState(false);
   const [batchStatus, setBatchStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
-  // ── visual picker ──
   const [jobId, setJobId] = useState<string | null>(null);
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [thumbVisible, setThumbVisible] = useState<Record<number, number>>({});
   const [selections, setSelections] = useState<Set<string>>(new Set());
+  const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [pickerStatus, setPickerStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
-  const [preview, setPreview] = useState<{ videoIndex: number; timestamp: number } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── load saved feed ──
   useEffect(() => {
     fetch('/api/feed').then(r => r.json()).then(d => { if (d.content) setFeed(d.content); }).catch(() => {});
   }, []);
 
-  // ── polling ──
   useEffect(() => {
     if (!jobId || !isLoading) return;
     pollRef.current = setInterval(async () => {
@@ -74,7 +169,6 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
     return () => clearInterval(pollRef.current!);
   }, [jobId, isLoading]);
 
-  // ── visual browse ──
   const handleBrowse = async () => {
     const urlList = urls.trim().split('\n').map(u => u.trim()).filter(Boolean);
     if (!urlList.length) return;
@@ -84,6 +178,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
     setThumbVisible({});
     setVideos([]);
     setJobId(null);
+    setPlayingKey(null);
     try {
       const res = await fetch('/api/picker/start', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -97,38 +192,35 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
     }
   };
 
-  // ── batch run ──
   const handleBatchRun = async () => {
     const text = feed.trim();
     if (!text) return;
-    setIsBatchRunning(true);
-    setBatchStatus(null);
+    setIsBatchRunning(true); setBatchStatus(null);
     try {
       await fetch('/api/feed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: text }) });
       const res = await fetch('/api/run', { method: 'POST' });
-      if (res.ok) {
-        setBatchStatus({ type: 'success', msg: 'Pipeline started — check Logs for progress.' });
-        onClipsUpdated?.();
-      } else {
-        setBatchStatus({ type: 'error', msg: 'Failed to start pipeline.' });
-      }
-    } catch {
-      setBatchStatus({ type: 'error', msg: 'Error starting pipeline.' });
-    } finally {
-      setIsBatchRunning(false);
-    }
+      if (res.ok) { setBatchStatus({ type: 'success', msg: 'Pipeline started — check Logs for progress.' }); onClipsUpdated?.(); }
+      else setBatchStatus({ type: 'error', msg: 'Failed to start pipeline.' });
+    } catch { setBatchStatus({ type: 'error', msg: 'Error starting pipeline.' }); }
+    finally { setIsBatchRunning(false); }
   };
 
-  // ── selection helpers ──
   const selKey = (vi: number, ts: number) => `${vi}:${ts}`;
-  const toggleSel = (vi: number, ts: number) => {
+  const toggleSel = useCallback((vi: number, ts: number) => {
     const k = selKey(vi, ts);
     setSelections(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
-  };
-  const isSel = (vi: number, ts: number) => selections.has(selKey(vi, ts));
+  }, []);
+
+  const handlePlay = useCallback((vi: number, ts: number) => {
+    setPlayingKey(selKey(vi, ts));
+  }, []);
+
+  const handleStop = useCallback(() => {
+    setPlayingKey(null);
+  }, []);
+
   const addMore = (vi: number) => setThumbVisible(p => ({ ...p, [vi]: (p[vi] || PAGE_SIZE) + PAGE_SIZE }));
 
-  // ── download ZIP ──
   const downloadZip = async () => {
     if (!jobId || selections.size === 0) return;
     setIsExtracting(true); setPickerStatus(null);
@@ -149,6 +241,8 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
       setPickerStatus({ type: 'error', msg: e.message || 'Download failed.' });
     } finally { setIsExtracting(false); }
   };
+
+  const clipDur = parseInt(duration) || 30;
 
   return (
     <div className="space-y-6">
@@ -211,7 +305,6 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
           </button>
         </div>
 
-        {/* picker status */}
         {pickerStatus && (
           <div className={`flex items-center gap-2 text-sm ${pickerStatus.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
             {pickerStatus.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
@@ -285,7 +378,10 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
       <AnimatePresence>
         {videos.length > 0 && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-            <h3 className="text-lg font-bold text-white tracking-tight">Browse & Select Clips</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white tracking-tight">Browse & Select Clips</h3>
+              <p className="text-xs text-zinc-500">Click a thumbnail to preview · click checkbox to select</p>
+            </div>
             {videos.map(video => {
               const visCount = thumbVisible[video.index] || PAGE_SIZE;
               const visible = video.thumbnails.slice(0, visCount);
@@ -321,43 +417,24 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                     </div>
                   )}
 
-                  {video.thumbnails.length > 0 && (
+                  {video.thumbnails.length > 0 && jobId && (
                     <div className="p-5 space-y-4">
                       <div className="grid grid-cols-4 gap-3">
                         {visible.map(thumb => {
-                          const selected = isSel(video.index, thumb.timestamp);
+                          const k = `${video.index}:${thumb.timestamp}`;
                           return (
-                            <div key={thumb.file} className="relative group">
-                              <motion.button
-                                onClick={() => toggleSel(video.index, thumb.timestamp)}
-                                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                                className={`relative w-full rounded-xl overflow-hidden border-2 transition-all block
-                                  ${selected ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-zinc-700 hover:border-zinc-500'}`}
-                              >
-                                <img
-                                  src={`/api/picker/thumb/${jobId}/${video.index}/${thumb.file}`}
-                                  alt={`t=${thumb.label}`}
-                                  className="w-full aspect-video object-cover"
-                                  loading="lazy"
-                                />
-                                {selected && (
-                                  <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
-                                    <CheckCircle2 className="w-6 h-6 text-blue-300 drop-shadow" />
-                                  </div>
-                                )}
-                                <div className={`absolute bottom-0 inset-x-0 py-1 text-center text-[11px] font-mono font-semibold
-                                  ${selected ? 'bg-blue-600/80 text-white' : 'bg-black/60 text-zinc-300'}`}>
-                                  {thumb.label}
-                                </div>
-                              </motion.button>
-                              <button
-                                onClick={() => setPreview({ videoIndex: video.index, timestamp: thumb.timestamp })}
-                                className="absolute top-1.5 right-1.5 w-7 h-7 bg-black/70 hover:bg-black/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                title="Preview clip"
-                              >
-                                <Play className="w-3.5 h-3.5 text-white fill-white" />
-                              </button>
-                            </div>
+                            <ThumbCard
+                              key={k}
+                              thumb={thumb}
+                              videoIndex={video.index}
+                              jobId={jobId}
+                              clipDuration={clipDur}
+                              selected={selections.has(k)}
+                              onToggle={() => toggleSel(video.index, thumb.timestamp)}
+                              playing={playingKey === k}
+                              onPlay={() => handlePlay(video.index, thumb.timestamp)}
+                              onStop={handleStop}
+                            />
                           );
                         })}
                         {Array.from({ length: Math.max(0, PAGE_SIZE - visible.length) }).map((_, i) => (
@@ -399,7 +476,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                 <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-sm font-bold text-white">{selections.size}</div>
                 <div>
                   <p className="text-sm font-semibold text-white">{selections.size} clip{selections.size !== 1 ? 's' : ''} selected</p>
-                  <p className="text-xs text-zinc-500">{duration}s each{credit ? ` · @${credit.replace(/^@/, '')}` : ''}</p>
+                  <p className="text-xs text-zinc-500">{readableDuration(clipDur)} each{credit ? ` · @${credit.replace(/^@/, '')}` : ''} · no audio</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -415,50 +492,6 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                 </button>
               </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Video Preview Modal ── */}
-      <AnimatePresence>
-        {preview && jobId && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-            onClick={() => setPreview(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
-              className="bg-zinc-900 border border-zinc-700 rounded-2xl overflow-hidden shadow-2xl max-w-2xl w-full"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-                <span className="text-sm font-semibold text-zinc-300">
-                  Preview — {Math.floor(preview.timestamp / 60)}:{String(preview.timestamp % 60).padStart(2, '0')}
-                  <span className="text-zinc-600 ml-2 font-normal">({duration}s clip)</span>
-                </span>
-                <button onClick={() => setPreview(null)} className="text-zinc-500 hover:text-white transition-colors"><X className="w-4 h-4" /></button>
-              </div>
-              <video
-                key={`${preview.videoIndex}-${preview.timestamp}`}
-                src={`/api/picker/video/${jobId}/${preview.videoIndex}`}
-                controls autoPlay className="w-full bg-black"
-                onLoadedMetadata={e => { (e.target as HTMLVideoElement).currentTime = preview.timestamp; }}
-              />
-              <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800">
-                <p className="text-xs text-zinc-500">Low-quality preview — downloaded clip will be full quality.</p>
-                <button
-                  onClick={() => { toggleSel(preview.videoIndex, preview.timestamp); setPreview(null); }}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    isSel(preview.videoIndex, preview.timestamp)
-                      ? 'bg-zinc-700 text-zinc-300 hover:bg-red-900/40 hover:text-red-400'
-                      : 'bg-blue-600 hover:bg-blue-500 text-white'
-                  }`}
-                >
-                  {isSel(preview.videoIndex, preview.timestamp) ? 'Deselect' : '+ Select this clip'}
-                </button>
-              </div>
-            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

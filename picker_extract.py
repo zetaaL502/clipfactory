@@ -16,7 +16,7 @@ async def main():
     credit = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else None
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    success = await download_4k_clip(url, timestamp, duration, output_path, credit=credit)
+    success = await download_4k_clip(url, timestamp, duration, output_path, credit=credit, no_audio=True)
     sys.exit(0 if success else 1)
 
 asyncio.run(main())

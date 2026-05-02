@@ -90,7 +90,7 @@ async def get_video_duration_url(url):
         await log_msg("WARNING", f"Could not get video duration: {e}")
         return 0.0
 
-async def download_4k_clip(url, start_time, duration, output_path, credit=None):
+async def download_4k_clip(url, start_time, duration, output_path, credit=None, no_audio=False):
     """Fetch stream URL via yt-dlp then cut with FFmpeg. Optionally burn credit watermark."""
     ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
     ytdlp_path = shutil.which("yt-dlp") or "yt-dlp"
@@ -119,7 +119,7 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None):
             escaped = escape_drawtext(credit)
             drawtext_filter = (
                 f"drawtext=fontfile={FONT_PATH}:text='{escaped}'"
-                f":fontsize=20:fontcolor=white:borderw=2:bordercolor=black"
+                f":fontsize=19:fontcolor=white:borderw=2:bordercolor=black"
                 f":x=10:y=h-th-14"
             )
 
@@ -132,22 +132,29 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None):
                 "-t", str(duration),
             ]
             if drawtext_filter:
-                # Use filter_complex for two-stream case so mapping is explicit
                 cmd += [
                     "-filter_complex", f"[0:v]{drawtext_filter}[vout]",
-                    "-map", "[vout]", "-map", "1:a:0",
+                    "-map", "[vout]",
                 ]
             else:
-                cmd += ["-map", "0:v:0", "-map", "1:a:0"]
+                cmd += ["-map", "0:v:0"]
+            if no_audio:
+                cmd += ["-an"]
+            else:
+                cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "128k"]
             cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                    "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output_path]
+                    "-movflags", "+faststart", output_path]
         else:
             video_url = urls[0]
             cmd = [ffmpeg_path, "-y", "-ss", str(int(start_time)), "-i", video_url, "-t", str(duration)]
             if drawtext_filter:
                 cmd += ["-vf", drawtext_filter]
+            if no_audio:
+                cmd += ["-an"]
+            else:
+                cmd += ["-c:a", "aac", "-b:a", "128k"]
             cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                    "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output_path]
+                    "-movflags", "+faststart", output_path]
 
         ffproc = await asyncio.create_subprocess_exec(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
