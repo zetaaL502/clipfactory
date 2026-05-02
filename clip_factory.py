@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import re
+import shutil
 import subprocess
 from datetime import datetime
 import google.generativeai as genai
@@ -12,7 +13,7 @@ from yt_dlp import YoutubeDL
 TEMP_DIR = "temp_processing"
 CLIPS_DIR = "clips"
 LOG_FILE = "pipeline.log"
-MODEL_NAME = "gemini-2.0-flash"  # Updated model
+MODEL_NAME = "gemini-2.0-flash"
 
 # Ensure directories exist
 os.makedirs(TEMP_DIR, exist_ok=True)
@@ -39,19 +40,33 @@ async def log_msg(level, message):
 def sanitize_filename(name):
     return re.sub(r'[^a-zA-Z0-9]', '_', name).lower()[:50]
 
+def hms_to_seconds(hms):
+    """Convert HH:MM:SS or MM:SS to total seconds."""
+    parts = hms.strip().split(':')
+    parts = [int(p) for p in parts]
+    if len(parts) == 3:
+        return parts[0] * 3600 + parts[1] * 60 + parts[2]
+    elif len(parts) == 2:
+        return parts[0] * 60 + parts[1]
+    return int(parts[0])
+
+def escape_drawtext(text):
+    """Escape special characters for FFmpeg drawtext filter."""
+    text = text.replace('\\', '\\\\')
+    text = text.replace("'", "\\'")
+    text = text.replace(':', '\\:')
+    return text
+
 async def execute_fallback(output_path, duration, is_4k=True):
     size = "3840x2160" if is_4k else "256x144"
     await log_msg("WARNING", f"Generating silent black fallback for {output_path} (Source blocked/unreachable)")
-    
-    ffmpeg_cmd = "ffmpeg"
-    
-    # Just a pure black screen, no audio, very small file size
+    ffmpeg_cmd = shutil.which("ffmpeg") or "ffmpeg"
     cmd = [
         ffmpeg_cmd, "-y",
         "-f", "lavfi", "-i", f"color=c=black:s={size}:d={duration}:r=30",
         "-c:v", "libx264",
         "-t", str(duration),
-        "-pix_fmt", "yuv420p", # Standard pixel format for maximum compatibility
+        "-pix_fmt", "yuv420p",
         "-an",
         output_path
     ]
@@ -60,14 +75,13 @@ async def execute_fallback(output_path, duration, is_4k=True):
     return process.returncode == 0
 
 async def download_low_res(url, output_path):
-    """Download tiny version for AI analysis quickly"""
+    """Download tiny version for AI analysis quickly."""
     ydl_opts = {
         'format': 'best[height<=360]/worst',
         'outtmpl': output_path,
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
-        # LOCAL RUN FIX: Use browser cookies to skip 403 Forbidden blocks
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
     try:
@@ -78,14 +92,13 @@ async def download_low_res(url, output_path):
         await log_msg("ERROR", f"Low-res download failed for {url}: {str(e)}")
         return False
 
-async def download_4k_clip(url, start_time, duration, output_path):
-    """Get direct stream URL via yt-dlp, then let ffmpeg seek+cut precisely."""
-    import shutil
+async def download_4k_clip(url, start_time, duration, output_path, credit=None):
+    """Get direct stream URL via yt-dlp, then let ffmpeg seek+cut precisely.
+    Optionally burns a credit watermark into the bottom-left corner."""
     ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
+    ytdlp_path = shutil.which("yt-dlp") or "yt-dlp"
 
     try:
-        # Step 1: resolve direct streamable URL(s) — fast, no download
-        ytdlp_path = shutil.which("yt-dlp") or "yt-dlp"
         proc = await asyncio.create_subprocess_exec(
             ytdlp_path,
             "-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
@@ -101,9 +114,17 @@ async def download_4k_clip(url, start_time, duration, output_path):
         if not urls:
             raise Exception(f"yt-dlp returned no URL. stderr: {stderr.decode()[:300]}")
 
-        # Step 2: build ffmpeg command — seek BEFORE -i for speed, then cut
+        # Build video filter chain — add drawtext if credit is provided
+        vf_parts = []
+        if credit:
+            escaped = escape_drawtext(credit)
+            vf_parts.append(
+                f"drawtext=text='{escaped}':fontsize=14:fontcolor=white"
+                f":borderw=2:bordercolor=black:x=10:y=h-th-10"
+            )
+        vf = ",".join(vf_parts) if vf_parts else None
+
         if len(urls) >= 2:
-            # Separate video + audio streams
             video_url, audio_url = urls[0], urls[1]
             cmd = [
                 ffmpeg_path, "-y",
@@ -111,6 +132,10 @@ async def download_4k_clip(url, start_time, duration, output_path):
                 "-ss", str(int(start_time)), "-i", audio_url,
                 "-t", str(duration),
                 "-map", "0:v:0", "-map", "1:a:0",
+            ]
+            if vf:
+                cmd += ["-vf", vf]
+            cmd += [
                 "-c:v", "libx264", "-preset", "fast", "-crf", "23",
                 "-c:a", "aac", "-b:a", "128k",
                 "-movflags", "+faststart",
@@ -122,6 +147,10 @@ async def download_4k_clip(url, start_time, duration, output_path):
                 ffmpeg_path, "-y",
                 "-ss", str(int(start_time)), "-i", video_url,
                 "-t", str(duration),
+            ]
+            if vf:
+                cmd += ["-vf", vf]
+            cmd += [
                 "-c:v", "libx264", "-preset", "fast", "-crf", "23",
                 "-c:a", "aac", "-b:a", "128k",
                 "-movflags", "+faststart",
@@ -152,7 +181,6 @@ async def download_4k_clip(url, start_time, duration, output_path):
 async def get_video_duration(video_path):
     """Use ffprobe to get the total duration of a video in seconds."""
     try:
-        import shutil
         ffprobe = shutil.which("ffprobe") or "ffprobe"
         process = await asyncio.create_subprocess_exec(
             ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", video_path,
@@ -164,143 +192,142 @@ async def get_video_duration(video_path):
     except Exception:
         return None
 
-def spread_timestamps(total_duration, clip_duration, count=3):
-    """Generate evenly-spread timestamps across the video."""
-    if not total_duration or total_duration <= clip_duration * count:
-        step = max(clip_duration + 5, 15)
-        return [i * step for i in range(count)]
+def spread_timestamps(total_duration, clip_duration, count=1):
+    """Generate evenly-spread fallback timestamps."""
+    if not total_duration or total_duration <= clip_duration:
+        return [0]
     usable = total_duration - clip_duration
-    step = usable / (count - 1) if count > 1 else usable
+    if count == 1:
+        return [round(usable / 2)]
+    step = usable / (count - 1)
     return [round(i * step) for i in range(count)]
 
-def enforce_min_gap(timestamps, min_gap, total_duration=None):
-    """Ensure timestamps are at least min_gap seconds apart. Fill gaps if needed."""
-    timestamps = sorted(set(int(t) for t in timestamps))
-    result = [timestamps[0]]
-    for ts in timestamps[1:]:
-        if ts - result[-1] >= min_gap:
-            result.append(ts)
-    # If we still don't have 3, pad by adding gaps after the last one
-    while len(result) < 3:
-        candidate = result[-1] + min_gap
-        if total_duration and candidate + min_gap > total_duration:
-            candidate = max(0, result[0] - min_gap)
-        result.append(int(candidate))
-    return sorted(result[:3])
-
 async def analyze_video(api_key, video_path, prompt, clip_duration=10):
-    """Use Gemini 1.5 Flash to find 3 visually distinct scenes matching the prompt."""
+    """Use Gemini to find the single exact timestamp matching the prompt.
+    Returns a list with one timestamp (in seconds).
+    Retries up to 3 times on 429 rate-limit errors with 60s backoff."""
     total_duration = await get_video_duration(video_path)
-    min_gap = max(clip_duration + 5, 20)  # clips must be at least this far apart
 
     if not api_key:
-        await log_msg("WARNING", f"No Gemini API key set — spreading timestamps evenly across video. Add your key in Settings for AI scene detection.")
+        await log_msg("WARNING", "No Gemini API key set — using midpoint timestamp. Add your key in Settings for AI scene detection.")
         return spread_timestamps(total_duration, clip_duration)
 
-    try:
-        import google.generativeai as genai
-        if not hasattr(genai, "upload_file"):
-            await log_msg("ERROR", "google-generativeai SDK is outdated — run: pip install -U google-generativeai")
-            return spread_timestamps(total_duration, clip_duration)
-
-        genai.configure(api_key=api_key)
-
-        dur_hint = f" The video is {int(total_duration)} seconds long." if total_duration else ""
-        system_instruction = (
-            "You are a professional video editor specializing in content-aware scene detection. "
-            f"Find exactly 3 timestamps (in seconds) in the video where the visual content clearly shows: '{prompt}'."
-            f"{dur_hint} "
-            "Rules you MUST follow: "
-            f"(1) Each timestamp must show DIFFERENT footage — never the same scene twice. "
-            f"(2) Timestamps must be at least {min_gap} seconds apart from each other. "
-            "(3) Spread them across the full length of the video — pick from the beginning, middle, and end where possible. "
-            "(4) Only include timestamps where the prompt content is actually visible on screen. "
-            "Reply with ONLY 3 integer numbers in seconds, separated by commas. No other text."
-        )
-        model = genai.GenerativeModel(MODEL_NAME, system_instruction=system_instruction)
-
-        await log_msg("INFO", f"Uploading video to Gemini for '{prompt}' analysis...")
-        myfile = genai.upload_file(video_path)
-
-        while myfile.state.name == "PROCESSING":
-            await asyncio.sleep(2)
-            myfile = genai.get_file(myfile.name)
-
-        response = model.generate_content(
-            [myfile, f"Find 3 timestamps where this is clearly visible: {prompt}"],
-            generation_config={"candidate_count": 1, "temperature": 0.2}
-        )
-        text = response.text.strip()
-        await log_msg("INFO", f"Gemini returned timestamps for '{prompt}': {text}")
-
-        raw = [float(v) for v in re.findall(r"(\d+(?:\.\d+)?)", text)]
-
-        try: genai.delete_file(myfile.name)
-        except: pass
-
-        if len(raw) >= 3:
-            timestamps = enforce_min_gap(raw[:6], min_gap, total_duration)
-            return timestamps
-        elif len(raw) > 0:
-            # Not enough timestamps — spread the ones we got
-            await log_msg("WARNING", f"Gemini returned fewer than 3 timestamps — filling gaps automatically.")
-            return enforce_min_gap(raw + spread_timestamps(total_duration, clip_duration), min_gap, total_duration)
-        else:
-            await log_msg("WARNING", f"Gemini returned no usable timestamps — spreading evenly.")
-            return spread_timestamps(total_duration, clip_duration)
-
-    except Exception as e:
-        await log_msg("ERROR", f"Gemini analysis failed: {str(e)}")
+    if not hasattr(genai, "upload_file"):
+        await log_msg("ERROR", "google-generativeai SDK is outdated — run: pip install -U google-generativeai")
         return spread_timestamps(total_duration, clip_duration)
 
+    genai.configure(api_key=api_key)
 
-async def process_url_line(api_key, line_num, url, duration, prompts):
+    await log_msg("INFO", f"Uploading video to Gemini for '{prompt}' analysis...")
+    myfile = genai.upload_file(video_path)
+
+    while myfile.state.name == "PROCESSING":
+        await asyncio.sleep(2)
+        myfile = genai.get_file(myfile.name)
+
+    model = genai.GenerativeModel(MODEL_NAME)
+    user_prompt = (
+        f"Watch this video carefully. Find the EXACT moment where: {prompt}. "
+        "Give me the precise start timestamp in HH:MM:SS format where this happens most clearly and obviously. "
+        "Do not give me a similar scene or approximate moment — find EXACTLY what was described. "
+        'Return ONLY this JSON: {"start": "HH:MM:SS"}'
+    )
+
+    MAX_RETRIES = 3
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = model.generate_content(
+                [myfile, user_prompt],
+                generation_config={"candidate_count": 1, "temperature": 0.1}
+            )
+            text = response.text.strip()
+            await log_msg("INFO", f"Gemini response for '{prompt}': {text}")
+
+            # Parse JSON response
+            json_match = re.search(r'\{[^}]+\}', text)
+            if json_match:
+                data = json.loads(json_match.group())
+                hms = data.get("start", "")
+                if hms:
+                    seconds = hms_to_seconds(hms)
+                    await log_msg("INFO", f"Gemini found exact timestamp: {hms} ({seconds}s)")
+                    try: genai.delete_file(myfile.name)
+                    except: pass
+                    return [seconds]
+
+            await log_msg("WARNING", f"Could not parse Gemini JSON response — using midpoint.")
+            try: genai.delete_file(myfile.name)
+            except: pass
+            return spread_timestamps(total_duration, clip_duration)
+
+        except Exception as e:
+            err_str = str(e)
+            is_rate_limit = "429" in err_str or "rate" in err_str.lower() or "quota" in err_str.lower()
+
+            if is_rate_limit and attempt < MAX_RETRIES:
+                await log_msg("WARNING", f"Rate limit hit — waiting 60 seconds before retry (attempt {attempt}/{MAX_RETRIES})...")
+                await asyncio.sleep(60)
+            elif is_rate_limit and attempt == MAX_RETRIES:
+                await log_msg("ERROR", f"Gemini rate limit exceeded after {MAX_RETRIES} retries for '{prompt}' — skipping AI analysis.")
+                try: genai.delete_file(myfile.name)
+                except: pass
+                return spread_timestamps(total_duration, clip_duration)
+            else:
+                await log_msg("ERROR", f"Gemini analysis failed: {err_str}")
+                try: genai.delete_file(myfile.name)
+                except: pass
+                return spread_timestamps(total_duration, clip_duration)
+
+    return spread_timestamps(total_duration, clip_duration)
+
+
+async def process_url_line(api_key, line_num, url, duration, prompts, credit=None):
     """
     Process one feed line — one URL with one or more keywords.
     Downloads the low-res preview ONCE, then for each keyword:
-      1. Asks Gemini to find 3 timestamps where that keyword is visible
-      2. Extracts those 3 clips from the high-quality source
-    Keywords are handled one-by-one so YouTube isn't hammered simultaneously.
+      1. Asks Gemini to find the exact timestamp where that keyword is visible
+      2. Extracts that clip from the high-quality source
+    If a credit string is provided, burns it into the bottom-left corner.
     """
     label = f"Line {line_num}"
-    await log_msg("INFO", f"=== [{label}] Starting: {url} | {duration}s | keywords: {', '.join(prompts)} ===")
+    credit_info = f" | credit: {credit}" if credit else ""
+    await log_msg("INFO", f"=== [{label}] Starting: {url} | {duration}s | keywords: {', '.join(prompts)}{credit_info} ===")
 
     # --- Step 1: Download low-res preview ONCE for this URL ---
     temp_file = os.path.join(TEMP_DIR, f"preview_s{line_num}.mp4")
     await log_msg("INFO", f"[{label}] Downloading low-res preview for AI analysis...")
     low_res_ok = await download_low_res(url, temp_file)
     if not low_res_ok:
-        await log_msg("WARNING", f"[{label}] Low-res preview failed — will spread timestamps evenly (no AI analysis).")
+        await log_msg("WARNING", f"[{label}] Low-res preview failed — will use midpoint timestamp (no AI analysis).")
 
-    # --- Step 2: For each keyword, analyze + extract independently ---
+    # --- Step 2: For each keyword, analyze + extract ---
     for keyword_num, prompt in enumerate(prompts, start=1):
         klabel = f"Line {line_num} / Keyword {keyword_num} '{prompt}'"
-        await log_msg("INFO", f"--- [{klabel}] Finding scenes ---")
+        await log_msg("INFO", f"--- [{klabel}] Finding exact scene ---")
 
-        # Gemini analysis uses the shared preview
         if os.path.exists(temp_file):
             timestamps = await analyze_video(api_key, temp_file, prompt, clip_duration=duration)
         else:
             timestamps = spread_timestamps(None, duration)
 
-        await log_msg("INFO", f"[{klabel}] Using timestamps: {timestamps}")
+        await log_msg("INFO", f"[{klabel}] Using timestamp(s): {timestamps}")
 
-        # Extract 3 clips at those timestamps — sequentially to avoid rate-limiting
         sanitized = sanitize_filename(prompt)
         succeeded = 0
         for i, ts in enumerate(timestamps):
             out = os.path.join(CLIPS_DIR, f"{sanitized}_s{line_num}_k{keyword_num}_part_{i+1}.mp4")
-            await log_msg("INFO", f"[{klabel}] Extracting clip {i+1}/3 at {ts}s → {out}")
-            ok = await download_4k_clip(url, ts, duration, out)
+            credit_log = f" (with credit: {credit})" if credit else ""
+            await log_msg("INFO", f"[{klabel}] Extracting clip at {ts}s → {out}{credit_log}")
+            ok = await download_4k_clip(url, ts, duration, out, credit=credit)
             if ok:
                 succeeded += 1
             else:
-                await log_msg("WARNING", f"[{klabel}] Clip {i+1} failed — skipping.")
+                await log_msg("WARNING", f"[{klabel}] Clip extraction failed — skipping.")
 
         if succeeded == 0:
-            await log_msg("ERROR", f"[{klabel}] All extractions failed. Source may be geo-blocked — try Internet Archive.")
+            await log_msg("ERROR", f"[{klabel}] Extraction failed. Source may be geo-blocked — try Internet Archive.")
         else:
-            await log_msg("INFO", f"[{klabel}] Done: {succeeded}/3 clips saved.")
+            await log_msg("INFO", f"[{klabel}] Done: {succeeded} clip(s) saved.")
 
     # --- Step 3: Clean up shared preview ---
     if os.path.exists(temp_file):
@@ -316,13 +343,16 @@ async def run_factory(feed_text, api_key):
     lines = [l.strip() for l in feed_text.strip().split('\n') if l.strip()]
 
     for line_num, line in enumerate(lines, start=1):
-        # Format: URL | DURATION | keyword1, keyword2, keyword3
+        # Format: URL | DURATION | keyword1, keyword2 | @credit (optional)
         parts = [p.strip() for p in line.split('|')]
         if len(parts) < 3:
             await log_msg("WARNING", f"Skipping malformed line {line_num}: '{line}'")
             continue
+
         url, dur_str = parts[0], parts[1]
         prompts = [p.strip() for p in parts[2].split(',') if p.strip()]
+        credit = parts[3] if len(parts) >= 4 and parts[3] else None
+
         try:
             duration = int(dur_str)
         except ValueError:
@@ -332,12 +362,14 @@ async def run_factory(feed_text, api_key):
             await log_msg("WARNING", f"No keywords on line {line_num} — skipping.")
             continue
 
-        await process_url_line(api_key, line_num, url, duration, prompts)
+        if line_num > 1:
+            await log_msg("INFO", "Waiting 8 seconds before next video request...")
+            await asyncio.sleep(8)
+
+        await process_url_line(api_key, line_num, url, duration, prompts, credit=credit)
 
     await log_msg("INFO", "--- Batch processing complete ---")
     await log_msg("INFO", f"--- Pipeline Finished at {datetime.now()} ---")
 
 if __name__ == "__main__":
-    # Example usage
-    # asyncio.run(run_factory("https://www.youtube.com/watch?v=... | 8 | people fighting", "YOUR_KEY"))
     pass

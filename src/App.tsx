@@ -434,23 +434,27 @@ export default function App() {
                 <textarea
                   value={feed}
                   onChange={(e) => setFeed(e.target.value)}
-                  placeholder="URL | duration | prompt1, prompt2, prompt3"
+                  placeholder="URL | duration | prompt1, prompt2 | @credit (optional)"
                   className="relative w-full h-[60vh] bg-zinc-900 border border-zinc-800 rounded-xl p-6 font-mono text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all resize-none shadow-inner"
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4">
                 <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
-                  <h3 className="text-zinc-300 font-semibold text-sm mb-2">Video URLs</h3>
-                  <p className="text-zinc-500 text-xs">Supports YouTube, Internet Archive, and thousands of other video sites.</p>
+                  <h3 className="text-zinc-300 font-semibold text-sm mb-2">Video URL</h3>
+                  <p className="text-zinc-500 text-xs">YouTube, Internet Archive, and thousands of other sites.</p>
                 </div>
                 <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
                   <h3 className="text-zinc-300 font-semibold text-sm mb-2">Duration</h3>
-                  <p className="text-zinc-500 text-xs">Target duration in seconds (e.g., 8, 12).</p>
+                  <p className="text-zinc-500 text-xs">Clip length in seconds (e.g., 8, 12).</p>
                 </div>
                 <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
                   <h3 className="text-zinc-300 font-semibold text-sm mb-2">Keywords</h3>
-                  <p className="text-zinc-500 text-xs text-balance">One or more comma-separated prompts. Each gets its own 3 clips — e.g. <span className="text-zinc-400 font-mono">cooking, dancing, laughing</span></p>
+                  <p className="text-zinc-500 text-xs">Comma-separated scene descriptions. Gemini finds the exact moment for each — e.g. <span className="text-zinc-400 font-mono">cooking, laughing</span></p>
+                </div>
+                <div className="bg-zinc-900/50 border border-blue-500/20 p-4 rounded-xl">
+                  <h3 className="text-zinc-300 font-semibold text-sm mb-2">Credit <span className="text-zinc-600 font-normal">(optional)</span></h3>
+                  <p className="text-zinc-500 text-xs">Text burned into the bottom-left corner of every clip — e.g. <span className="text-zinc-400 font-mono">@yourchannel</span></p>
                 </div>
               </div>
             </motion.div>
@@ -757,7 +761,13 @@ export default function App() {
                 <div className="bg-blue-500/10 border border-blue-500/20 p-5 rounded-xl mb-4 flex items-start gap-3">
                   <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-blue-100 leading-relaxed">
-                    <strong>Multi-Scene Extraction:</strong> For every link, the factory extracts 3 separate high-quality clips of the requested duration.
+                    <strong>Exact Scene Detection:</strong> Gemini watches the video and finds the single most precise moment matching your description. Add a 4th field (e.g. <code className="text-blue-300">@mychannel</code>) to burn a credit watermark into the bottom-left of every clip.
+                  </p>
+                </div>
+                <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-xl mb-4 flex items-start gap-3">
+                  <Clock className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-emerald-100 leading-relaxed">
+                    <strong>Rate Limit Protection:</strong> An 8-second delay is added between video requests. If Gemini hits a rate limit (429), it automatically waits 60 seconds and retries up to 3 times before moving on.
                   </p>
                 </div>
                 <div className="bg-orange-500/10 border border-orange-500/20 p-5 rounded-xl mb-4 flex items-start gap-3">
