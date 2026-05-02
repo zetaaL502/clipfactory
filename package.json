@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "start": "node server.ts",
-    "postinstall": "python3 -c \"import urllib.request; urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', 'get-pip.py')\" && python3 get-pip.py --user && python3 -m pip install --user -r requirements.txt --break-system-packages",
+    "dev": "npx tsx server.ts",
+    "start": "npx tsx server.ts",
+    "postinstall": "pip install -r requirements.txt --break-system-packages 2>/dev/null || true",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",

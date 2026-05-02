@@ -85,8 +85,9 @@ async def download_4k_clip(url, start_time, duration, output_path):
 
     try:
         # Step 1: resolve direct streamable URL(s) — fast, no download
+        ytdlp_path = shutil.which("yt-dlp") or "yt-dlp"
         proc = await asyncio.create_subprocess_exec(
-            "yt-dlp",
+            ytdlp_path,
             "-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
             "--get-url", "--no-warnings", "--no-playlist",
             "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
