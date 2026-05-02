@@ -43,8 +43,7 @@ async def execute_fallback(output_path, duration, is_4k=True):
     size = "3840x2160" if is_4k else "256x144"
     await log_msg("WARNING", f"Generating silent black fallback for {output_path} (Source blocked/unreachable)")
     
-    import imageio_ffmpeg
-    ffmpeg_cmd = imageio_ffmpeg.get_ffmpeg_exe()
+    ffmpeg_cmd = "ffmpeg"
     
     # Just a pure black screen, no audio, very small file size
     cmd = [
@@ -84,8 +83,8 @@ async def download_4k_clip(url, start_time, duration, output_path):
     def get_ranges(info_dict, ydl):
         return [{'start_time': start_time, 'end_time': start_time + duration}]
         
-    import imageio_ffmpeg
-    ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+    import shutil
+    ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
         
     ydl_opts = {
         'format': 'bestvideo[height<=2160]/best[height<=2160]',
