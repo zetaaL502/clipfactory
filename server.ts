@@ -251,14 +251,18 @@ asyncio.run(main())
       }
       const videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8'));
 
-      // Scan thumb dir for files already written (shows progress during extraction)
+      // Use thumbnails array from status.json when available (accurate timestamps).
+      // Fall back to directory scan during active extraction (thumbnails written incrementally).
       const thumbDir = path.join(videoDir, 'thumbs');
       let thumbnails: { file: string; timestamp: number; label: string }[] = [];
-      if (fs.existsSync(thumbDir)) {
+      if (videoStatus.thumbnails && videoStatus.thumbnails.length > 0) {
+        thumbnails = videoStatus.thumbnails;
+      } else if (fs.existsSync(thumbDir)) {
         const files = fs.readdirSync(thumbDir).filter(f => f.endsWith('.jpg')).sort();
-        const startOffset = videoStatus.thumbStartOffset ?? 30;
+        const startOffset: number = videoStatus.thumbStartOffset ?? 30;
+        const interval: number = videoStatus.thumbInterval ?? 30;
         thumbnails = files.map((f, idx) => {
-          const ts = startOffset + idx * 30;
+          const ts = startOffset + idx * interval;
           const m = Math.floor(ts / 60), s = ts % 60;
           return { file: f, timestamp: ts, label: `${m}:${s.toString().padStart(2, '0')}` };
         });

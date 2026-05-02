@@ -15,7 +15,8 @@ interface VideoData {
 
 const PAGE_SIZE = 4;
 
-function shortUrl(url: string) {
+function shortUrl(url: string | undefined) {
+  if (!url) return '—';
   try { const u = new URL(url); return u.hostname + u.pathname.slice(0, 36) + (u.pathname.length > 36 ? '…' : ''); }
   catch { return url.slice(0, 55) + (url.length > 55 ? '…' : ''); }
 }
