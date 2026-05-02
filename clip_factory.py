@@ -36,16 +36,16 @@ def sanitize_filename(name):
 
 async def execute_fallback(output_path, duration, is_4k=True):
     size = "3840x2160" if is_4k else "256x144"
-    await log_msg("WARNING", f"Generating black screen fallback for {output_path} (Video unreachable)")
+    await log_msg("WARNING", f"Generating silent black fallback for {output_path} (Source blocked/unreachable)")
     
-    # Generate clean black video with informational text, NO AUDIO
+    # Just a pure black screen, no audio, very small file size
     cmd = [
         "ffmpeg", "-y",
         "-f", "lavfi", "-i", f"color=c=black:s={size}:d={duration}:r=30",
-        "-vf", "drawtext=text='Video Processing Fallback':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2",
-        "-an", # No audio
         "-c:v", "libx264",
         "-t", str(duration),
+        "-pix_fmt", "yuv420p", # Standard pixel format for maximum compatibility
+        "-an",
         output_path
     ]
     process = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -55,25 +55,27 @@ async def execute_fallback(output_path, duration, is_4k=True):
 async def download_low_res(url, output_path):
     """Download tiny version for AI analysis quickly"""
     ydl_opts = {
-        'format': 'best[height<=144]/worst', # More resilient matching
+        'format': 'best[height<=360]/worst',
         'outtmpl': output_path,
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
+        # LOCAL RUN FIX: Use browser cookies to skip 403 Forbidden blocks
+        'cookiesfrombrowser': ('chrome',), 
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
     try:
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
-        return True
+        return os.path.exists(output_path)
     except Exception as e:
         await log_msg("ERROR", f"Low-res download failed for {url}: {str(e)}")
         return False
 
 async def download_4k_clip(url, start_time, duration, output_path):
     """Accurately trim the high-res version from source, NO AUDIO"""
-    # Using download_sections for accuracy
     ydl_opts = {
-        'format': 'bestvideo[height<=2160]/best[height<=2160]', # Better fallback
+        'format': 'bestvideo[height<=2160]/best[height<=2160]',
         'download_sections': [{
             'title': 'section',
             'parts': [{
@@ -85,30 +87,42 @@ async def download_4k_clip(url, start_time, duration, output_path):
         'merge_output_format': 'mp4',
         'noplaylist': True,
         'quiet': True,
-        'postprocessor_args': ['-an'], # Strictly remove audio
+        # LOCAL RUN FIX: Use browser cookies to skip 403 Forbidden blocks
+        'cookiesfrombrowser': ('chrome',),
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
     try:
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
-        return True
+        
+        # Check if file exists and has content (Min 10KB to avoid zero-duration headers)
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 10000: 
+            return True
+        else:
+            await log_msg("WARNING", f"Download produced 0-second/corrupt file for {output_path}. Please ensure FFMPEG is installed and in your PATH.")
+            return await execute_fallback(output_path, duration, True)
     except Exception as e:
         await log_msg("ERROR", f"4K Download failed for {url} at {start_time}s: {str(e)}")
-        # If it fails (e.g. YouTube blocking), try fallback
         return await execute_fallback(output_path, duration, True)
 
 async def analyze_video(api_key, video_path, prompt):
     """Use Gemini 1.5 Flash to find 3 distinct scenes"""
     if not api_key:
-        await log_msg("ERROR", "Missing Google API Key for analysis")
-        return [0, 10, 20] # Default fallback
+        return [0, 10, 20]
 
     try:
+        import google.generativeai as genai
+        # Force a check for the correct version logic
+        if not hasattr(genai, "upload_file"):
+            await log_msg("ERROR", "!!! LOCAL SDK ERROR !!! Your 'google-generativeai' package is outdated. Run: pip install -U google-generativeai")
+            return [2, 12, 22]
+
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(MODEL_NAME)
         
-        # Upload file to Gemini
-        await log_msg("INFO", f"Uploading {video_path} to Gemini for analysis...")
-        myfile = genai.upload_file(path=video_path)
+        await log_msg("INFO", f"Uploading {video_path} to Gemini...")
+        # Use the explicit function from the module
+        myfile = genai.upload_file(video_path)
         
         while myfile.state.name == "PROCESSING":
             await asyncio.sleep(2)
@@ -116,38 +130,28 @@ async def analyze_video(api_key, video_path, prompt):
             
         system_instruction = (
             "You are a professional video editor. Identify 3 DISTINCT timestamps (start times in seconds) "
-            f"in the video that best match the visual prompt: '{prompt}'. "
-            "Ensure the timestamps are spread out (e.g. beginning, middle, end if possible). "
-            "IMPORTANT: Return ONLY 3 numbers separated by commas. No text, no words."
+            f"in the video that match: '{prompt}'. Return ONLY 3 numbers separated by commas."
         )
         
-        response = model.generate_content([myfile, f"Visual Prompt: {prompt}"], generation_config={"candidate_count": 1}, system_instruction=system_instruction)
+        response = model.generate_content([myfile, f"Prompt: {prompt}"], generation_config={"candidate_count": 1}, system_instruction=system_instruction)
         text = response.text.strip()
-        await log_msg("INFO", f"Gemini suggested timestamps: {text}")
         
-        # Parse numbers more robustly
         timestamps = []
         found = re.findall(r"(\d+(?:\.\d+)?)", text)
         for val in found:
-            try:
-                timestamps.append(float(val))
-            except:
-                continue
+            timestamps.append(float(val))
                 
-        # cleanup
-        try:
-            genai.delete_file(myfile.name)
-        except:
-            pass
+        try: genai.delete_file(myfile.name)
+        except: pass
         
-        if timestamps:
-            # Sort them so they are in order
+        if len(timestamps) >= 3:
             timestamps.sort()
             return timestamps[:3]
-        return [0, 5, 10]
+        return [0, 10, 20]
     except Exception as e:
         await log_msg("ERROR", f"Gemini analysis failed: {str(e)}")
-        return [0, 5, 10]
+        return [0, 10, 20]
+
 
 async def process_entry(api_key, index, url, duration, prompt):
     sanitized = sanitize_filename(prompt)

@@ -100,6 +100,17 @@ async def download_zip(req: ZipRequest):
     
     return FileResponse(zip_path, media_type='application/zip', filename="selected_clips.zip")
 
+@app.post("/api/delete-clips")
+async def delete_clips(req: ZipRequest):
+    for file in req.files:
+        file_path = os.path.join(CLIPS_DIR, file)
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                print(f"Error deleting {file}: {e}")
+    return {"status": "ok"}
+
 @app.get("/api/download-all")
 async def download_all():
     zip_path = "all_clips.zip"
