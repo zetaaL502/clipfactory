@@ -13,7 +13,7 @@ from yt_dlp import YoutubeDL
 TEMP_DIR = "temp_processing"
 CLIPS_DIR = "clips"
 LOG_FILE = "pipeline.log"
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = "gemini-1.5-flash-8b"
 
 # Ensure directories exist
 os.makedirs(TEMP_DIR, exist_ok=True)
