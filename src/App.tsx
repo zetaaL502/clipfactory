@@ -321,8 +321,8 @@ export default function App() {
       <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <Video className="w-5 h-5 text-white" />
+            <div className="w-11 h-11 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <Video className="w-6 h-6 text-white" />
             </div>
             <h1 className="text-lg font-semibold tracking-tight text-emerald-400">Clip Factory ⚡️ V2</h1>
           </div>
