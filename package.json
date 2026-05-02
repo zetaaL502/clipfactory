@@ -4,9 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev:ui": "vite",
-    "dev:api": "python3 server.py",
-    "dev": "concurrently \"npm run dev:api\" \"npm run dev:ui\"",
+    "dev": "npm run build && python3 server.py",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",

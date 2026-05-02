@@ -513,7 +513,7 @@ export default function App() {
                     const ib = parseInt(b[0]);
                     if (isNaN(ia) || isNaN(ib)) return a[0].localeCompare(b[0]);
                     return ia - ib;
-                  }).map(([index, groupClips]) => (
+                  }).map(([index, groupClips]: [string, string[]]) => (
                     <div key={index} className="space-y-6">
                       <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
                         <div className="flex items-center gap-3">
