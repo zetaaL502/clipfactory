@@ -343,22 +343,32 @@ function App() {
                   </div>
                 </div>
 
+                {/* Browse & Pick format */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-bold text-white uppercase tracking-wider">Browse &amp; Pick — URL Format</h4>
+                  <p className="text-xs text-zinc-400">One URL per line. Add <span className="font-mono text-zinc-300">@credit</span> after a URL (with a space) to watermark that video's clips individually.</p>
+                  <pre className="bg-black rounded-xl p-4 text-xs font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap">{`https://archive.org/details/my-film @HistoryChannel
+https://archive.org/details/other-film @BBC
+https://vimeo.com/123456789`}</pre>
+                </div>
+
                 {/* Batch format */}
                 <div className="space-y-3">
-                  <h4 className="text-sm font-bold text-white uppercase tracking-wider">Batch Format</h4>
+                  <h4 className="text-sm font-bold text-white uppercase tracking-wider">Batch Run — Feed Format</h4>
+                  <p className="text-xs text-zinc-400">Fields separated by <span className="font-mono text-zinc-300">|</span>. Duration and credit are optional.</p>
                   <pre className="bg-black rounded-xl p-4 text-xs font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap">{`URL | duration | start_time | @credit
 
-# One clip at 2:30
-https://youtube.com/... | 30sec | 2:30 | @BBC
+# Cut one 30-second clip starting at 2:30
+https://archive.org/details/my-film | 30sec | 2:30 | @BBC
 
-# Chunk from 3:30 to end (add +)
-https://youtube.com/... | 30sec | 3:30+
+# Chunk the whole video into 2-min pieces
+https://archive.org/details/my-film | 2min | @CNN
 
-# Chunk entire video
-https://archive.org/... | 2min | @CNN
+# Chunk from 3:30 to the end (add + after time)
+https://archive.org/details/my-film | 30sec | 3:30+
 
-# Duration formats: 8sec, 2min, 1min30sec, 90
-# Time formats: 1:30 or 0:04:22 or 90`}</pre>
+# Duration: 30  30sec  2min  1min30sec  1:30
+# Time:     90  1:30   0:04:22`}</pre>
                 </div>
 
                 {/* Notes */}

@@ -312,12 +312,14 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
             <Link className="w-4 h-4 text-zinc-500" /> Video URLs
-            <span className="text-zinc-600 font-normal text-xs">(one per line — add <span className="font-mono text-zinc-500">@credit</span> after any URL to give it its own watermark)</span>
           </label>
+          <p className="text-xs text-zinc-500 leading-relaxed">
+            One URL per line. Optionally add <span className="font-mono text-zinc-400">@credit</span> after a URL (separated by a space) to burn a watermark on that video's clips. If no <span className="font-mono text-zinc-400">@credit</span> is on the line, the Default Credit below is used instead.
+          </p>
           <textarea
             value={urls}
             onChange={e => setUrls(e.target.value)}
-            placeholder={"https://archive.org/details/... @BBC\nhttps://archive.org/details/... @CNN\nhttps://vimeo.com/..."}
+            placeholder={"https://archive.org/details/soviet-war-film @HistoryChannel\nhttps://archive.org/details/some-other-film @BBC\nhttps://vimeo.com/123456789"}
             rows={4}
             className="w-full bg-zinc-950 border border-zinc-700 rounded-xl p-4 font-mono text-sm focus:ring-2 focus:ring-blue-500/50 outline-none resize-none text-zinc-200 placeholder:text-zinc-600"
           />
