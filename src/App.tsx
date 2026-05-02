@@ -366,7 +366,7 @@ export default function App() {
               <div className="flex items-center justify-between flex-wrap gap-4">
                 <div>
                   <h2 className="text-2xl font-bold text-white tracking-tight">Input Stream</h2>
-                  <p className="text-zinc-400 text-sm mt-1">Define your video sources, clip duration, and exact start timestamp. One line per clip.</p>
+                  <p className="text-zinc-400 text-sm mt-1">One line per clip. No start time = whole video gets chunked automatically.</p>
                 </div>
                 <div className="flex items-center gap-3">
                   {status && (

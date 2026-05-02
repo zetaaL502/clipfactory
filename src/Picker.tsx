@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ChevronLeft, ChevronRight, Download, Loader2,
-  AlertCircle, CheckCircle2, Film, Link, Clock, AtSign, X, RefreshCcw
+  ChevronRight, Download, Loader2,
+  AlertCircle, CheckCircle2, Film, Link, Clock, AtSign, X
 } from 'lucide-react';
 
 interface Thumbnail {
@@ -55,7 +55,7 @@ export default function Picker() {
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
-  const [thumbPages, setThumbPages] = useState<Record<number, number>>({});
+  const [thumbVisible, setThumbVisible] = useState<Record<number, number>>({});
   const [selections, setSelections] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -83,7 +83,7 @@ export default function Picker() {
     setStatus(null);
     setIsRunning(true);
     setSelections(new Set());
-    setThumbPages({});
+    setThumbVisible({});
     setVideos([]);
     setJobId(null);
     try {
@@ -115,12 +115,11 @@ export default function Picker() {
   const isSelected = (videoIndex: number, timestamp: number) =>
     selections.has(selKey(videoIndex, timestamp));
 
-  const goPage = (videoIndex: number, delta: number, max: number) => {
-    setThumbPages(prev => {
-      const cur = prev[videoIndex] || 0;
-      const next = Math.max(0, Math.min(cur + delta, Math.ceil(max / PAGE_SIZE) - 1));
-      return { ...prev, [videoIndex]: next };
-    });
+  const addMore = (videoIndex: number) => {
+    setThumbVisible(prev => ({
+      ...prev,
+      [videoIndex]: (prev[videoIndex] || PAGE_SIZE) + PAGE_SIZE,
+    }));
   };
 
   const downloadSelected = async () => {
@@ -235,9 +234,9 @@ export default function Picker() {
         {videos.length > 0 && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             {videos.map(video => {
-              const page = thumbPages[video.index] || 0;
-              const visible = video.thumbnails.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-              const totalPages = Math.ceil(video.thumbnails.length / PAGE_SIZE);
+              const visibleCount = thumbVisible[video.index] || PAGE_SIZE;
+              const visible = video.thumbnails.slice(0, visibleCount);
+              const hasMore = visibleCount < video.thumbnails.length;
 
               return (
                 <motion.div
@@ -317,28 +316,21 @@ export default function Picker() {
                         ))}
                       </div>
 
-                      {/* Pagination */}
-                      {totalPages > 1 && (
-                        <div className="flex items-center justify-between">
+                      {/* Add 4 / progress */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-zinc-600">
+                          Showing {visible.length} of {video.thumbnails.length} thumbnails
+                          {video.status !== 'done' && ' (still extracting…)'}
+                        </span>
+                        {hasMore && (
                           <button
-                            onClick={() => goPage(video.index, -1, video.thumbnails.length)}
-                            disabled={page === 0}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                            onClick={() => addMore(video.index)}
+                            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-all"
                           >
-                            <ChevronLeft className="w-3.5 h-3.5" /> Previous 4
+                            <ChevronRight className="w-3.5 h-3.5" /> Add 4
                           </button>
-                          <span className="text-xs text-zinc-600">
-                            {page + 1} / {totalPages} &nbsp;·&nbsp; {video.thumbnails.length} thumbnails
-                          </span>
-                          <button
-                            onClick={() => goPage(video.index, +1, video.thumbnails.length)}
-                            disabled={page >= totalPages - 1}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                          >
-                            Next 4 <ChevronRight className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
                 </motion.div>

@@ -112,15 +112,17 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None):
             raise Exception(f"yt-dlp returned no URL. stderr: {stderr.decode()[:300]}")
 
         FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-        vf_parts = []
+
+        # Build drawtext filter string (empty string = no watermark)
+        drawtext_filter = ""
         if credit:
             escaped = escape_drawtext(credit)
-            vf_parts.append(
+            drawtext_filter = (
                 f"drawtext=fontfile='{FONT_PATH}':text='{escaped}'"
-                f":fontsize=14:fontcolor=white:borderw=2:bordercolor=black"
-                f":x=10:y=h-th-10"
+                f":fontsize=18:fontcolor=white:borderw=2:bordercolor=black"
+                f":box=1:boxcolor=black@0.4:boxborderw=4"
+                f":x=10:y=h-th-14"
             )
-        vf = ",".join(vf_parts) if vf_parts else None
 
         if len(urls) >= 2:
             video_url, audio_url = urls[0], urls[1]
@@ -129,28 +131,39 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None):
                 "-ss", str(int(start_time)), "-i", video_url,
                 "-ss", str(int(start_time)), "-i", audio_url,
                 "-t", str(duration),
-                "-map", "0:v:0", "-map", "1:a:0",
             ]
-            if vf:
-                cmd += ["-vf", vf]
+            if drawtext_filter:
+                # Use filter_complex for two-stream case so mapping is explicit
+                cmd += [
+                    "-filter_complex", f"[0:v]{drawtext_filter}[vout]",
+                    "-map", "[vout]", "-map", "1:a:0",
+                ]
+            else:
+                cmd += ["-map", "0:v:0", "-map", "1:a:0"]
             cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "23",
                     "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output_path]
         else:
             video_url = urls[0]
             cmd = [ffmpeg_path, "-y", "-ss", str(int(start_time)), "-i", video_url, "-t", str(duration)]
-            if vf:
-                cmd += ["-vf", vf]
+            if drawtext_filter:
+                cmd += ["-vf", drawtext_filter]
             cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "23",
                     "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output_path]
 
         ffproc = await asyncio.create_subprocess_exec(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         _, ff_err = await ffproc.communicate()
+        ff_err_str = ff_err.decode()
+
+        # Always log last 200 chars of stderr so we can see drawtext errors etc.
+        if ff_err_str.strip():
+            tail = ff_err_str.strip().splitlines()[-3:]
+            await log_msg("DEBUG", f"FFmpeg tail: {' | '.join(tail)}")
 
         if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
             return True
         else:
-            await log_msg("WARNING", f"FFmpeg produced empty file: {ff_err.decode()[-300:]}")
+            await log_msg("WARNING", f"FFmpeg produced empty file: {ff_err_str[-400:]}")
             if os.path.exists(output_path):
                 os.remove(output_path)
             return False
