@@ -12,7 +12,7 @@ from yt_dlp import YoutubeDL
 TEMP_DIR = "temp_processing"
 CLIPS_DIR = "clips"
 LOG_FILE = "pipeline.log"
-MODEL_NAME = "gemini-1.5-flash"  # Reliable for video analysis
+MODEL_NAME = "gemini-2.0-flash"  # Updated model
 
 # Ensure directories exist
 os.makedirs(TEMP_DIR, exist_ok=True)
@@ -79,37 +79,71 @@ async def download_low_res(url, output_path):
         return False
 
 async def download_4k_clip(url, start_time, duration, output_path):
-    """Accurately trim the high-res version from source, NO AUDIO"""
-    def get_ranges(info_dict, ydl):
-        return [{'start_time': start_time, 'end_time': start_time + duration}]
-        
+    """Get direct stream URL via yt-dlp, then let ffmpeg seek+cut precisely."""
     import shutil
     ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
-        
-    ydl_opts = {
-        'format': 'bestvideo[height<=2160]/best[height<=2160]',
-        'download_ranges': get_ranges,
-        'outtmpl': output_path,
-        'merge_output_format': 'mp4',
-        'noplaylist': True,
-        'ffmpeg_location': ffmpeg_path,
-        'quiet': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    }
+
     try:
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        
-        # Check if file exists and has real content (min 10KB)
+        # Step 1: resolve direct streamable URL(s) — fast, no download
+        proc = await asyncio.create_subprocess_exec(
+            "yt-dlp",
+            "-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+            "--get-url", "--no-warnings", "--no-playlist",
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            url,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        urls = [u.strip() for u in stdout.decode().strip().splitlines() if u.strip()]
+
+        if not urls:
+            raise Exception(f"yt-dlp returned no URL. stderr: {stderr.decode()[:300]}")
+
+        # Step 2: build ffmpeg command — seek BEFORE -i for speed, then cut
+        if len(urls) >= 2:
+            # Separate video + audio streams
+            video_url, audio_url = urls[0], urls[1]
+            cmd = [
+                ffmpeg_path, "-y",
+                "-ss", str(int(start_time)), "-i", video_url,
+                "-ss", str(int(start_time)), "-i", audio_url,
+                "-t", str(duration),
+                "-map", "0:v:0", "-map", "1:a:0",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-c:a", "aac", "-b:a", "128k",
+                "-movflags", "+faststart",
+                output_path,
+            ]
+        else:
+            video_url = urls[0]
+            cmd = [
+                ffmpeg_path, "-y",
+                "-ss", str(int(start_time)), "-i", video_url,
+                "-t", str(duration),
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-c:a", "aac", "-b:a", "128k",
+                "-movflags", "+faststart",
+                output_path,
+            ]
+
+        ffproc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, ff_err = await ffproc.communicate()
+
         if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
             return True
         else:
-            await log_msg("WARNING", f"Download produced empty/corrupt file for {output_path} — skipping clip.")
+            await log_msg("WARNING", f"ffmpeg produced empty/corrupt file for {output_path}. stderr: {ff_err.decode()[-300:]}")
             if os.path.exists(output_path):
                 os.remove(output_path)
             return False
+
     except Exception as e:
-        await log_msg("ERROR", f"4K Download failed for {url} at {start_time}s: {str(e)} — skipping clip.")
+        await log_msg("ERROR", f"Clip extraction failed for {url} at {start_time}s: {str(e)}")
         if os.path.exists(output_path):
             os.remove(output_path)
         return False

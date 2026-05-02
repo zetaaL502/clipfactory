@@ -38,6 +38,37 @@ async function startServer() {
     res.json({ status: 'ok' });
   });
 
+  // Generate a thumbnail from any clip on demand, cache as .jpg alongside the .mp4
+  app.get('/api/thumbnail/:filename', (req, res) => {
+    const filename = path.basename(req.params.filename);
+    if (!filename.endsWith('.mp4')) return res.status(400).send('bad file');
+    const videoPath = path.join(CLIPS_DIR, filename);
+    if (!fs.existsSync(videoPath)) return res.status(404).send('not found');
+
+    const thumbPath = path.join(CLIPS_DIR, filename.replace('.mp4', '.jpg'));
+    const sendThumb = () => {
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=604800');
+      res.sendFile(path.resolve(thumbPath));
+    };
+
+    if (fs.existsSync(thumbPath)) return sendThumb();
+
+    // Extract frame at 1 s — seek AFTER -i for accuracy, use -update 1 for single image
+    const ff = spawn('ffmpeg', [
+      '-i', videoPath,
+      '-ss', '1',
+      '-vframes', '1', '-q:v', '3',
+      '-vf', 'scale=640:-1',
+      '-update', '1',
+      thumbPath,
+    ]);
+    ff.on('close', (code: number) => {
+      if (code === 0 && fs.existsSync(thumbPath)) return sendThumb();
+      res.status(500).send('thumb failed');
+    });
+  });
+
   app.get('/api/clips', (req, res) => {
     if (!fs.existsSync(CLIPS_DIR)) {
       return res.json({ files: [] });

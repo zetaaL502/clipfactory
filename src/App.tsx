@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Play, 
   FileText, 
@@ -18,6 +18,128 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+function ClipCard({ clip, index, selected, onToggle }: {
+  clip: string;
+  index: number;
+  selected: boolean;
+  onToggle: () => void;
+  [key: string]: unknown;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const keyword = clip.match(/_k(\d+)_/)?.[1];
+  const part = clip.match(/part_(\d+)/)?.[1];
+  const promptName = clip.replace(/_s\d+_k\d+_part_\d+\.mp4$/, '').replace(/_/g, ' ').trim();
+  const posterUrl = `/api/thumbnail/${clip}`;
+
+  const handlePlay = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = false;
+    v.controls = true;
+    v.play().catch(() => {});
+    setPlaying(true);
+  }, []);
+
+  const handleClose = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const v = videoRef.current;
+    if (!v) return;
+    v.pause();
+    v.currentTime = 0;
+    v.controls = false;
+    v.muted = true;
+    setPlaying(false);
+  }, []);
+
+  const handleMouseEnter = useCallback(() => {
+    if (playing) return;
+    videoRef.current?.play().catch(() => {});
+  }, [playing]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (playing) return;
+    const v = videoRef.current;
+    if (!v) return;
+    v.pause();
+    v.currentTime = 0;
+  }, [playing]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: index * 0.04 }}
+      className={`group relative bg-zinc-900 border ${selected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-zinc-800'} rounded-2xl overflow-hidden hover:border-zinc-700 transition-all shadow-xl`}
+    >
+      {!playing && (
+        <div className="absolute top-3 left-3 z-20" onClick={e => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggle}
+            className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-blue-600 cursor-pointer"
+          />
+        </div>
+      )}
+
+      <div className="aspect-video bg-zinc-950 relative group/video">
+        <video
+          ref={videoRef}
+          src={`/clips/${clip}`}
+          poster={posterUrl}
+          className="w-full h-full object-cover"
+          playsInline
+          muted
+          preload="none"
+          onEnded={() => {
+            const v = videoRef.current;
+            if (v) { v.controls = false; v.muted = true; v.currentTime = 0; }
+            setPlaying(false);
+          }}
+        />
+
+        {!playing && (
+          <div
+            className="absolute inset-0 cursor-pointer flex items-center justify-center"
+            onClick={handlePlay}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+          >
+            <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center opacity-0 group-hover/video:opacity-100 transition-opacity duration-150">
+              <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+            </div>
+          </div>
+        )}
+
+        {playing && (
+          <button
+            onClick={handleClose}
+            className="absolute top-2 right-2 z-20 p-1 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      <div className="p-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-white truncate capitalize" title={promptName}>{promptName}</p>
+          <p className="text-[10px] text-zinc-500 font-mono mt-0.5">keyword {keyword} · part {part}</p>
+        </div>
+        <a
+          href={`/clips/${clip}`}
+          download={clip}
+          className="shrink-0 p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-all"
+        >
+          <Download className="w-3.5 h-3.5" />
+        </a>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function App() {
   const [feed, setFeed] = useState('');
   const [logs, setLogs] = useState('');
@@ -29,8 +151,6 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-  const [playingClip, setPlayingClip] = useState<string | null>(null);
-
   // Group clips by line/URL number encoded as _s{N}_ in the filename
   const groupedClips = React.useMemo(() => {
     const groups: Record<string, string[]> = {};
@@ -524,87 +644,15 @@ export default function App() {
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {groupClips.sort().map((clip, i) => {
-                          const isPlaying = playingClip === clip;
-                          const keyword = clip.match(/_k(\d+)_/)?.[1];
-                          const part = clip.match(/part_(\d+)/)?.[1];
-                          const promptName = clip.replace(/_s\d+_k\d+_part_\d+\.mp4$/, '').replace(/_/g, ' ').trim();
-                          return (
-                          <motion.div
+                        {groupClips.sort().map((clip, i) => (
+                          <ClipCard
                             key={clip}
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: i * 0.05 }}
-                            className={`group relative bg-zinc-900 border ${selectedClips.has(clip) ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-zinc-800'} rounded-2xl overflow-hidden hover:border-zinc-700 transition-all shadow-xl`}
-                          >
-                            {!isPlaying && (
-                              <div className="absolute top-3 left-3 z-20" onClick={e => e.stopPropagation()}>
-                                <input
-                                  type="checkbox"
-                                  checked={selectedClips.has(clip)}
-                                  onChange={() => toggleClip(clip)}
-                                  className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-950 transition-all cursor-pointer"
-                                />
-                              </div>
-                            )}
-
-                            <div className="aspect-video bg-black relative group/video">
-                              {isPlaying ? (
-                                <>
-                                  <video
-                                    key={clip}
-                                    src={`/clips/${clip}`}
-                                    className="w-full h-full"
-                                    controls
-                                    autoPlay
-                                    playsInline
-                                  />
-                                  <button
-                                    onClick={() => setPlayingClip(null)}
-                                    className="absolute top-2 right-2 z-20 p-1 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                </>
-                              ) : (
-                                <div
-                                  className="absolute inset-0 cursor-pointer"
-                                  onClick={() => setPlayingClip(clip)}
-                                >
-                                  <video
-                                    src={`/clips/${clip}`}
-                                    className="w-full h-full object-cover"
-                                    muted
-                                    playsInline
-                                    preload="metadata"
-                                    onMouseOver={e => e.currentTarget.play()}
-                                    onMouseOut={e => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
-                                  />
-                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/video:opacity-100 transition-opacity duration-150">
-                                    <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center">
-                                      <Play className="w-5 h-5 text-white fill-white ml-0.5" />
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="p-3 flex items-center justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="text-xs font-medium text-white truncate capitalize" title={promptName}>{promptName}</p>
-                                <p className="text-[10px] text-zinc-500 font-mono mt-0.5">keyword {keyword} · part {part}</p>
-                              </div>
-                              <a
-                                href={`/clips/${clip}`}
-                                download={clip}
-                                className="shrink-0 p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-all"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                              </a>
-                            </div>
-                          </motion.div>
-                          );
-                        })}
+                            clip={clip}
+                            index={i}
+                            selected={selectedClips.has(clip)}
+                            onToggle={() => toggleClip(clip)}
+                          />
+                        ))}
                       </div>
                     </div>
                   ))}
