@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "node server.ts",
-    "postinstall": "python3 -c \"import urllib.request; urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', 'get-pip.py')\" && python3 get-pip.py --user && python3 -m pip install --user -r requirements.txt --break-system-packages",
+    "postinstall": "python3 -c \"import urllib.request; urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', 'get-pip.py')\" && python3 get-pip.py && python3 -m pip install -r requirements.txt --break-system-packages",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
