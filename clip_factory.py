@@ -118,9 +118,8 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None):
         if credit:
             escaped = escape_drawtext(credit)
             drawtext_filter = (
-                f"drawtext=fontfile='{FONT_PATH}':text='{escaped}'"
-                f":fontsize=18:fontcolor=white:borderw=2:bordercolor=black"
-                f":box=1:boxcolor=black@0.4:boxborderw=4"
+                f"drawtext=fontfile={FONT_PATH}:text='{escaped}'"
+                f":fontsize=20:fontcolor=white:borderw=2:bordercolor=black"
                 f":x=10:y=h-th-14"
             )
 
@@ -155,10 +154,12 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None):
         _, ff_err = await ffproc.communicate()
         ff_err_str = ff_err.decode()
 
-        # Always log last 200 chars of stderr so we can see drawtext errors etc.
+        # Always log FFmpeg return code and any stderr output for debugging
+        if ffproc.returncode != 0:
+            await log_msg("ERROR", f"FFmpeg exited with code {ffproc.returncode}")
         if ff_err_str.strip():
-            tail = ff_err_str.strip().splitlines()[-3:]
-            await log_msg("DEBUG", f"FFmpeg tail: {' | '.join(tail)}")
+            tail = ff_err_str.strip().splitlines()[-5:]
+            await log_msg("INFO", f"FFmpeg stderr: {' | '.join(tail)}")
 
         if os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
             return True

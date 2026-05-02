@@ -59,12 +59,14 @@ async def process_video(job_dir, video_index, url):
 
     ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
 
-    # Try starting at 30s; if video is shorter than 30s start from 0
-    start_offset = 30 if (duration and duration > 30) else 0
+    THUMB_INTERVAL = 15  # one thumbnail every 15 seconds
+
+    # Try starting at 15s; if video is shorter than 15s start from 0
+    start_offset = THUMB_INTERVAL if (duration and duration > THUMB_INTERVAL) else 0
     cmd = [
         ffmpeg, "-y",
         "-ss", str(start_offset), "-i", video_path,
-        "-vf", "fps=1/30,scale=320:-1",
+        "-vf", f"fps=1/{THUMB_INTERVAL},scale=320:-1",
         "-q:v", "3",
         os.path.join(thumb_dir, "thumb_%04d.jpg")
     ]
@@ -85,7 +87,7 @@ async def process_video(job_dir, video_index, url):
 
     thumb_data = []
     for i, thumb in enumerate(thumbs):
-        ts = start_offset + i * 30
+        ts = start_offset + i * THUMB_INTERVAL
         m, s = divmod(ts, 60)
         thumb_data.append({"file": thumb, "timestamp": ts, "label": f"{m}:{s:02d}"})
 
