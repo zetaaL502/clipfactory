@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Settings, Video, Download, Terminal, CheckCircle2,
@@ -41,13 +41,6 @@ function ClipCard({ clip, index, selected, onToggle }: {
   const [playing, setPlaying] = useState(false);
   const clipName = clip.replace(/\.mp4$/, '').replace(/_/g, ' ').trim();
 
-  const handlePlay = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    const v = videoRef.current; if (!v) return;
-    v.play().catch(() => {});
-    setPlaying(true);
-  }, []);
-
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -64,13 +57,14 @@ function ClipCard({ clip, index, selected, onToggle }: {
       )}
       <div className="aspect-video bg-zinc-950 relative">
         <video ref={videoRef} src={`/clips/${clip}`} poster={`/api/thumbnail/${clip}`}
-          className="w-full h-full object-cover" playsInline preload="none"
+          className="w-full h-full object-cover" playsInline preload="metadata"
           controls={playing}
+          onPlay={() => setPlaying(true)}
           onEnded={() => setPlaying(false)}
-          onPause={() => { if (videoRef.current?.currentTime === 0) setPlaying(false); }}
         />
         {!playing && (
-          <button onClick={handlePlay}
+          <button
+            onClick={e => { e.stopPropagation(); videoRef.current?.play(); }}
             className="absolute inset-0 w-full h-full flex items-center justify-center z-20 bg-transparent">
             <Play className="w-10 h-10 text-white fill-white drop-shadow-lg" />
           </button>
