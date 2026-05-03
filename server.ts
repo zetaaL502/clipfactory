@@ -336,8 +336,10 @@ asyncio.run(main())
       fs.mkdirSync(clipsDir, { recursive: true });
 
       const extractedPaths: { filePath: string; name: string }[] = [];
+      const padLen = String(selections.length).length;
 
-      for (const sel of selections) {
+      for (let i = 0; i < selections.length; i++) {
+        const sel = selections[i];
         const videoStatusPath = path.join(jobDir, String(sel.videoIndex), 'status.json');
         if (!fs.existsSync(videoStatusPath)) continue;
         let videoStatus: Record<string, unknown>;
@@ -345,12 +347,17 @@ asyncio.run(main())
         const url = videoStatus.url as string | undefined;
         if (!url) continue;
 
-        const clipName = `clip_v${sel.videoIndex}_t${sel.timestamp}.mp4`;
+        // Use per-clip duration if provided, fall back to global duration
+        const clipDuration = (sel.duration && sel.duration > 0) ? sel.duration : (duration || 10);
+
+        // Number the clip by selection order (1-indexed, zero-padded)
+        const seqNum = String(i + 1).padStart(padLen, '0');
+        const clipName = `clip_${seqNum}_v${sel.videoIndex}_t${sel.timestamp}.mp4`;
         const clipPath = path.join(clipsDir, clipName);
 
         await new Promise<void>(resolve => {
           const effectiveCredit = (videoStatus.credit as string | null) || credit || null;
-          const args = ['picker_extract.py', url, String(sel.timestamp), String(duration || 10), clipPath];
+          const args = ['picker_extract.py', url, String(sel.timestamp), String(clipDuration), clipPath];
           if (effectiveCredit) args.push(effectiveCredit);
           const proc = spawn('python3', args);
           proc.stdout.on('data', d => console.log('[extract]', d.toString()));
