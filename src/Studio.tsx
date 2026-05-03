@@ -185,8 +185,6 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
   const [duration, setDuration] = useState('30');
   const [credit, setCredit] = useState('');
 
-  const [showBatch, setShowBatch] = useState(false);
-  const [feed, setFeed] = useState('');
   const [isBatchRunning, setIsBatchRunning] = useState(false);
   const [batchStatus, setBatchStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
@@ -205,10 +203,6 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const selectedSet = new Set(selectionOrder);
-
-  useEffect(() => {
-    fetch('/api/feed').then(r => r.json()).then(d => { if (d.content) setFeed(d.content); }).catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (!jobId || !isLoading) return;
@@ -247,16 +241,46 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
     }
   };
 
-  const handleBatchRun = async () => {
-    if (!feed.trim()) return;
-    setIsBatchRunning(true); setBatchStatus(null);
+  const isBatchText = (text: string) => {
+    return text.split('\n').some(line => {
+      const t = line.trim();
+      if (!t || t.startsWith('#')) return false;
+      return t.includes(',');
+    });
+  };
+
+  const handleUnifiedRun = async () => {
+    const rawLines = urls.trim().split('\n').map(u => u.trim()).filter(Boolean);
+    if (!rawLines.length) return;
+    if (isBatchText(urls)) {
+      setIsBatchRunning(true); setBatchStatus(null);
+      try {
+        await fetch('/api/feed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: urls }) });
+        const res = await fetch('/api/run', { method: 'POST' });
+        if (res.ok) { setBatchStatus({ type: 'success', msg: 'Pipeline started — check Logs for progress.' }); onClipsUpdated?.(); }
+        else setBatchStatus({ type: 'error', msg: 'Failed to start pipeline.' });
+      } catch { setBatchStatus({ type: 'error', msg: 'Error starting pipeline.' }); }
+      finally { setIsBatchRunning(false); }
+      return;
+    }
+    const parsed = rawLines.map(parseUrlLine);
+    const urlList = parsed.map(p => p.url);
+    const urlCredits = parsed.map(p => p.credit);
+    setPickerStatus(null); setIsLoading(true);
+    setSelectionOrder([]); setThumbDurations({});
+    setThumbStart({}); setThumbSeekVal({}); setThumbSeekErr({});
+    setVideos([]); setJobId(null); setPlayingKey(null);
     try {
-      await fetch('/api/feed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: feed }) });
-      const res = await fetch('/api/run', { method: 'POST' });
-      if (res.ok) { setBatchStatus({ type: 'success', msg: 'Pipeline started — check Logs for progress.' }); onClipsUpdated?.(); }
-      else setBatchStatus({ type: 'error', msg: 'Failed to start pipeline.' });
-    } catch { setBatchStatus({ type: 'error', msg: 'Error starting pipeline.' }); }
-    finally { setIsBatchRunning(false); }
+      const res = await fetch('/api/picker/start', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls: urlList, urlCredits, duration: parseDurationSecs(duration), credit: credit || null })
+      });
+      const data = await res.json();
+      setJobId(data.jobId);
+    } catch {
+      setIsLoading(false);
+      setPickerStatus({ type: 'error', msg: 'Failed to start job.' });
+    }
   };
 
   const selKey = (vi: number, ts: number) => `${vi}:${ts}`;
@@ -343,7 +367,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
               rows={3}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 font-mono text-sm focus:ring-1 focus:ring-blue-500/60 outline-none resize-none text-zinc-200 placeholder:text-zinc-700"
             />
-            <p className="text-xs text-zinc-600">One box for everything. Paste URLs for Browse & Pick, or paste comma lines for Batch Run.</p>
+            <p className="text-xs text-zinc-600">One box for everything. Plain links = Browse & Pick. Comma lines = Batch Run.</p>
           </div>
 
           <div className="space-y-3">
@@ -371,15 +395,10 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button onClick={handleBrowse} disabled={isLoading || !urls.trim()}
+              <button onClick={handleUnifiedRun} disabled={isLoading || isBatchRunning || !urls.trim()}
                 className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-blue-500/20 active:scale-95">
-                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
-                {isLoading ? 'Loading…' : 'Browse & Pick'}
-              </button>
-              <button onClick={handleBatchRun} disabled={isBatchRunning || !urls.trim()}
-                className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-emerald-500/20 active:scale-95">
-                {isBatchRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />}
-                {isBatchRunning ? 'Running…' : 'Batch Run'}
+                {(isLoading || isBatchRunning) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />}
+                {(isLoading || isBatchRunning) ? 'Working…' : 'Run'}
               </button>
             </div>
           </div>
@@ -392,95 +411,28 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
           </div>
         )}
 
-        {/* Batch Run expander */}
-        <div className="border-t border-zinc-800 pt-3">
-          <button onClick={() => setShowBatch(b => !b)}
-            className="flex items-center gap-2 text-xs font-medium text-zinc-500 hover:text-zinc-300 transition-colors">
-            <Zap className="w-3.5 h-3.5 text-amber-500" />
-            Format help
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showBatch ? 'rotate-180' : ''}`} />
-          </button>
-
-          <AnimatePresence>
-            {showBatch && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                <div className="pt-4 space-y-4">
-
-                  <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                      <div>
-                        <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Batch Run</p>
-                        <p className="text-sm text-zinc-300">Use the same box above, just with comma-separated lines.</p>
-                      </div>
-                      <code className="text-[11px] font-mono text-zinc-400">URL , field , field , @credit</code>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
-                      <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl p-3 space-y-1">
-                        <p className="text-emerald-300 font-semibold uppercase tracking-wide text-[10px]">Browse & Pick</p>
-                        <p className="text-zinc-300">Use the top URL box when you want to browse thumbnails and pick clips manually.</p>
-                      </div>
-                      <div className="bg-blue-500/8 border border-blue-500/20 rounded-xl p-3 space-y-1">
-                        <p className="text-blue-300 font-semibold uppercase tracking-wide text-[10px]">Batch Run</p>
-                        <p className="text-zinc-300">Use batch lines when you want the server to cut clips automatically from text.</p>
-                      </div>
-                      <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl p-3 space-y-1">
-                        <p className="text-amber-300 font-semibold uppercase tracking-wide text-[10px]">Rule</p>
-                        <p className="text-zinc-300">Comma <span className="font-mono text-zinc-400">,</span> is the only delimiter. <span className="font-mono text-amber-400">@credit</span> stays optional.</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-zinc-800 flex items-center gap-2">
-                      <span className="text-xs font-semibold text-zinc-400">Examples:</span>
-                      <span className="text-xs text-zinc-500">what each mode does and when to use it</span>
-                    </div>
-                    <div className="divide-y divide-zinc-800/60">
-                      {[
-                        { mode: 'Single clip',  example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">2:30</span><span className="text-zinc-700"> , </span><span className="text-amber-400">@BBC</span></>, note: 'One exact clip at one timestamp.' },
-                        { mode: 'Chunk video',  example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">2min</span><span className="text-zinc-700"> , </span><span className="text-amber-400">@CNN</span></>, note: 'Whole video split evenly.' },
-                        { mode: 'Range chunk', example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">2:30-4:00</span></>, note: 'Only a section, not the whole video.' },
-                        { mode: 'Best N',       example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-purple-400">best:5</span></>, note: '5 evenly spaced clips.' },
-                        { mode: 'Random N',     example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-purple-400">random:5</span></>, note: '5 random clips.' },
-                        { mode: 'Chunk tail',   example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">3:30<span className="text-amber-300">+</span></span></>, note: 'From a point to the end.' },
-                      ].map(row => (
-                        <div key={row.mode} className="grid grid-cols-[82px_1fr] gap-3 px-4 py-2.5">
-                          <span className="text-[10px] text-zinc-600 uppercase tracking-wider font-semibold">{row.mode}</span>
-                          <div className="space-y-1">
-                            <code className="text-xs font-mono">{row.example}</code>
-                            <p className="text-[11px] text-zinc-500">{row.note}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl p-3 flex gap-2.5">
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-200"><strong>YouTube on cloud:</strong> Often blocked. Use archive.org or Vimeo. For YouTube, run locally and paste cookies in Settings.</p>
-                  </div>
-
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <button onClick={handleBatchRun} disabled={isBatchRunning || !feed.trim()}
-                      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white px-5 py-2 rounded-xl font-semibold text-sm transition-all shadow-md shadow-emerald-500/20 active:scale-95">
-                      {isBatchRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />}
-                      {isBatchRunning ? 'Running…' : 'Run Pipeline'}
-                    </button>
-                    <button onClick={() => { setFeed(''); setBatchStatus(null); }}
-                      className="text-xs text-zinc-600 hover:text-red-400 transition-colors flex items-center gap-1.5 px-2 py-2 rounded-lg hover:bg-zinc-800">
-                      <Trash2 className="w-3.5 h-3.5" /> Clear
-                    </button>
-                    {batchStatus && (
-                      <span className={`text-sm flex items-center gap-1.5 ${batchStatus.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {batchStatus.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-                        {batchStatus.msg}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+        <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">One Input, One Button</p>
+              <p className="text-sm text-zinc-300">Plain links = Browse & Pick. Comma lines = Batch Run.</p>
+            </div>
+            <code className="text-[11px] font-mono text-zinc-400">URL , field , field , @credit</code>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
+            <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl p-3 space-y-1">
+              <p className="text-emerald-300 font-semibold uppercase tracking-wide text-[10px]">Browse & Pick</p>
+              <p className="text-zinc-300">Paste plain video links to browse thumbnails and pick clips.</p>
+            </div>
+            <div className="bg-blue-500/8 border border-blue-500/20 rounded-xl p-3 space-y-1">
+              <p className="text-blue-300 font-semibold uppercase tracking-wide text-[10px]">Batch Run</p>
+              <p className="text-zinc-300">Paste comma-separated lines to auto cut from text.</p>
+            </div>
+            <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl p-3 space-y-1">
+              <p className="text-amber-300 font-semibold uppercase tracking-wide text-[10px]">Rule</p>
+              <p className="text-zinc-300">Comma <span className="font-mono text-zinc-400">,</span> is the only delimiter.</p>
+            </div>
+          </div>
         </div>
       </div>
 
