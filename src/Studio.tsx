@@ -185,9 +185,6 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
   const [duration, setDuration] = useState('30');
   const [credit, setCredit] = useState('');
 
-  const [isBatchRunning, setIsBatchRunning] = useState(false);
-  const [batchStatus, setBatchStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
-
   const [jobId, setJobId] = useState<string | null>(null);
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -239,18 +236,6 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
       setIsLoading(false);
       setPickerStatus({ type: 'error', msg: 'Failed to start job.' });
     }
-  };
-
-  const handleBatchRun = async () => {
-    if (!urls.trim()) return;
-    setIsBatchRunning(true); setBatchStatus(null);
-    try {
-      await fetch('/api/feed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: urls }) });
-      const res = await fetch('/api/run', { method: 'POST' });
-      if (res.ok) { setBatchStatus({ type: 'success', msg: 'Pipeline started — check Logs for progress.' }); onClipsUpdated?.(); }
-      else setBatchStatus({ type: 'error', msg: 'Failed to start pipeline.' });
-    } catch { setBatchStatus({ type: 'error', msg: 'Error starting pipeline.' }); }
-    finally { setIsBatchRunning(false); }
   };
 
   const selKey = (vi: number, ts: number) => `${vi}:${ts}`;
@@ -369,20 +354,8 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
               {isLoading ? 'Loading…' : 'Browse & Pick'}
             </button>
-            <button onClick={handleBatchRun} disabled={isBatchRunning || !urls.trim()}
-              className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-emerald-500/20 active:scale-95">
-              {isBatchRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />}
-              {isBatchRunning ? 'Running…' : 'Batch Run'}
-            </button>
           </div>
         </div>
-
-        {pickerStatus && (
-          <div className={`flex items-center gap-2 text-sm ${pickerStatus.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
-            {pickerStatus.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-            {pickerStatus.msg}
-          </div>
-        )}
 
       </div>
 
