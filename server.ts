@@ -366,9 +366,11 @@ asyncio.run(main())
           proc.on('error', () => resolve());
         });
 
-        if (fs.existsSync(clipPath)) {
-          extractedPaths.push({ filePath: clipPath, name: clipName });
-        }
+        if (fs.existsSync(clipPath)) extractedPaths.push({ filePath: clipPath, name: clipName });
+      }
+
+      if (extractedPaths.length === 0) {
+        return res.status(400).json({ error: 'No clips were extracted. Please wait for the thumbnails to finish loading, then try again.' });
       }
 
       res.setHeader('Content-Type', 'application/zip');
