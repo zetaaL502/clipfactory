@@ -162,8 +162,7 @@ function ThumbCard({
           <div className="absolute inset-0 bg-blue-500/15 pointer-events-none" />
         )}
         <div className="absolute inset-0 flex items-center justify-center" onClick={playing ? onStop : onPlay}>
-          <div className={`w-9 h-9 rounded-full bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-opacity
-            ${playing ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}>
+          <div className="w-9 h-9 rounded-full bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
             {playing
               ? <Square className="w-3.5 h-3.5 text-white fill-white" />
               : <Play className="w-3.5 h-3.5 text-white fill-white ml-0.5" />}
