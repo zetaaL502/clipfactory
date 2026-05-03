@@ -201,6 +201,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [extractProgress, setExtractProgress] = useState<{ current: number; total: number } | null>(null);
   const [thumbStart, setThumbStart] = useState<Record<number, number>>({});
   const [thumbSeekVal, setThumbSeekVal] = useState<Record<number, string>>({});
   const [thumbSeekErr, setThumbSeekErr] = useState<Record<number, boolean>>({});
@@ -284,7 +285,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
 
   const downloadZip = async () => {
     if (!jobId || selectionOrder.length === 0) return;
-    setIsExtracting(true); setPickerStatus(null);
+    setIsExtracting(true); setPickerStatus(null); setExtractProgress(null);
     try {
       const sels = selectionOrder.map((k: string) => {
         const [vi, ts] = k.split(':').map(Number);
@@ -292,26 +293,44 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
         const clipDuration = rawDur.trim() ? parseDurationSecs(rawDur) : globalDurSecs;
         return { videoIndex: vi, timestamp: ts, duration: clipDuration };
       });
-      const res = await fetch('/api/picker/extract-zip', {
+      const startRes = await fetch('/api/picker/extract-zip', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobId, selections: sels, duration: globalDurSecs, credit: credit || null })
       });
-      if (!res.ok) {
+      if (!startRes.ok) {
         let msg = 'Extraction failed';
-        try { const d = await res.json(); msg = d.error || msg; } catch {}
+        try { const d = await startRes.json(); msg = d.error || msg; } catch {}
         throw new Error(msg);
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'clips.zip'; a.click();
-      URL.revokeObjectURL(url);
+      const { progressId } = await startRes.json();
+
+      // Poll progress
+      await new Promise<void>((resolve, reject) => {
+        const poll = setInterval(async () => {
+          try {
+            const r = await fetch(`/api/picker/extract-progress/${progressId}`);
+            const p = await r.json();
+            setExtractProgress({ current: p.current, total: p.total });
+            if (p.done) {
+              clearInterval(poll);
+              if (p.error) reject(new Error(p.error));
+              else resolve();
+            }
+          } catch (e) { clearInterval(poll); reject(e); }
+        }, 700);
+      });
+
+      // Download the zip
+      const a = document.createElement('a');
+      a.href = `/api/picker/extract-download/${progressId}`;
+      a.download = 'clips.zip'; a.click();
       setPickerStatus({ type: 'success', msg: `${sels.length} clip${sels.length !== 1 ? 's' : ''} downloaded.` });
       setSelectionOrder([]);
       setThumbDurations({});
       onClipsUpdated?.();
     } catch (e: any) {
       setPickerStatus({ type: 'error', msg: e.message || 'Download failed.' });
-    } finally { setIsExtracting(false); }
+    } finally { setIsExtracting(false); setExtractProgress(null); }
   };
 
   const segmentSelected = (video: VideoData) =>
@@ -541,7 +560,11 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                 <button onClick={downloadZip} disabled={isExtracting}
                   className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white px-5 py-2 rounded-xl font-semibold text-sm transition-all shadow-md shadow-emerald-500/20 active:scale-95">
                   {isExtracting
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Cutting…</>
+                    ? <><Loader2 className="w-4 h-4 animate-spin" />
+                        {extractProgress
+                          ? `Cutting ${extractProgress.current + 1} of ${extractProgress.total}…`
+                          : 'Starting…'}
+                      </>
                     : <><Download className="w-4 h-4" /> Download ZIP</>}
                 </button>
               </div>

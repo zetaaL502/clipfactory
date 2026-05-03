@@ -331,82 +331,111 @@ asyncio.run(main())
     res.sendFile(path.resolve(thumbPath));
   });
 
-  app.post('/api/picker/extract-zip', async (req, res) => {
-    try {
-      const { jobId, selections, duration, credit } = req.body;
-      if (!jobId || !Array.isArray(selections) || selections.length === 0) {
-        return res.status(400).json({ error: 'Invalid request' });
-      }
-      const jobDir = path.join(PICKER_DIR, path.basename(jobId));
-      const clipsDir = path.join(jobDir, 'clips');
-      fs.mkdirSync(clipsDir, { recursive: true });
+  // Progress store: progressId -> state
+  const extractJobs = new Map<string, { current: number; total: number; done: boolean; error?: string; zipPath?: string }>();
 
-      const extractedPaths: { filePath: string; name: string }[] = [];
-      const padLen = String(selections.length).length;
+  app.post('/api/picker/extract-zip', (req, res) => {
+    const { jobId, selections, duration, credit } = req.body;
+    if (!jobId || !Array.isArray(selections) || selections.length === 0) {
+      return res.status(400).json({ error: 'Invalid request' });
+    }
+    const progressId = randomUUID();
+    extractJobs.set(progressId, { current: 0, total: selections.length, done: false });
+    res.json({ progressId });
 
-      for (let i = 0; i < selections.length; i++) {
-        const sel = selections[i];
-        const clipDuration = (sel.duration && sel.duration > 0) ? sel.duration : (duration || 10);
-        const seqNum = String(i + 1).padStart(padLen, '0');
-        const clipName = `clip_${seqNum}_v${sel.videoIndex}_t${sel.timestamp}.mp4`;
-        const clipPath = path.join(clipsDir, clipName);
+    // Run extraction in background
+    (async () => {
+      try {
+        const jobDir = path.join(PICKER_DIR, path.basename(jobId));
+        const clipsDir = path.join(jobDir, 'clips');
+        fs.mkdirSync(clipsDir, { recursive: true });
+        const extractedPaths: { filePath: string; name: string }[] = [];
+        const padLen = String(selections.length).length;
 
-        // Prefer cutting from the already-downloaded local video — no re-download needed
-        const localVideo = path.join(jobDir, String(sel.videoIndex), 'video.mp4');
-        if (fs.existsSync(localVideo)) {
-          await new Promise<void>(resolve => {
-            const ff = spawn('ffmpeg', [
-              '-y', '-ss', String(sel.timestamp), '-i', localVideo,
-              '-t', String(clipDuration), '-c:v', 'libx264', '-preset', 'fast',
-              '-crf', '23', '-an', '-movflags', '+faststart', clipPath
-            ]);
-            ff.stderr.on('data', (d: Buffer) => console.log('[extract-ffmpeg]', d.toString().split('\n').slice(-2).join(' ')));
-            ff.on('close', () => resolve());
-            ff.on('error', (e: Error) => { console.error('[extract-ffmpeg] error:', e); resolve(); });
-          });
-        } else {
-          // Fallback: pass local path to picker_extract.py; if missing, fall back to URL
-          const videoStatusPath = path.join(jobDir, String(sel.videoIndex), 'status.json');
-          let sourceArg = localVideo; // picker_extract.py will use it if it's a file
-          if (!fs.existsSync(localVideo)) {
-            if (!fs.existsSync(videoStatusPath)) continue;
-            let videoStatus: Record<string, unknown>;
-            try { videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8')); } catch { continue; }
-            const url = videoStatus.url as string | undefined;
-            if (!url) continue;
-            sourceArg = url;
+        for (let i = 0; i < selections.length; i++) {
+          extractJobs.set(progressId, { current: i, total: selections.length, done: false });
+          const sel = selections[i];
+          const clipDuration = (sel.duration && sel.duration > 0) ? sel.duration : (duration || 10);
+          const seqNum = String(i + 1).padStart(padLen, '0');
+          const clipName = `clip_${seqNum}_v${sel.videoIndex}_t${sel.timestamp}.mp4`;
+          const clipPath = path.join(clipsDir, clipName);
+          const localVideo = path.join(jobDir, String(sel.videoIndex), 'video.mp4');
+
+          if (fs.existsSync(localVideo)) {
+            await new Promise<void>(resolve => {
+              const ff = spawn('ffmpeg', [
+                '-y', '-ss', String(sel.timestamp), '-i', localVideo,
+                '-t', String(clipDuration), '-c:v', 'libx264', '-preset', 'fast',
+                '-crf', '23', '-an', '-movflags', '+faststart', clipPath
+              ]);
+              ff.stderr.on('data', (d: Buffer) => console.log('[extract-ffmpeg]', d.toString().split('\n').slice(-2).join(' ')));
+              ff.on('close', () => resolve());
+              ff.on('error', (e: Error) => { console.error('[extract-ffmpeg] error:', e); resolve(); });
+            });
+          } else {
+            const videoStatusPath = path.join(jobDir, String(sel.videoIndex), 'status.json');
+            let sourceArg = localVideo;
+            if (!fs.existsSync(localVideo)) {
+              if (!fs.existsSync(videoStatusPath)) continue;
+              let videoStatus: Record<string, unknown>;
+              try { videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8')); } catch { continue; }
+              const url = videoStatus.url as string | undefined;
+              if (!url) continue;
+              sourceArg = url;
+            }
+            await new Promise<void>(resolve => {
+              const python = process.platform === 'win32' ? 'python' : 'python3';
+              const proc = spawn(python, ['picker_extract.py', sourceArg, String(sel.timestamp), String(clipDuration), clipPath]);
+              proc.stdout.on('data', (d: Buffer) => console.log('[extract]', d.toString()));
+              proc.stderr.on('data', (d: Buffer) => console.error('[extract]', d.toString()));
+              proc.on('close', () => resolve());
+              proc.on('error', () => resolve());
+            });
           }
-          await new Promise<void>(resolve => {
-            const python = process.platform === 'win32' ? 'python' : 'python3';
-            const proc = spawn(python, ['picker_extract.py', sourceArg, String(sel.timestamp), String(clipDuration), clipPath]);
-            proc.stdout.on('data', (d: Buffer) => console.log('[extract]', d.toString()));
-            proc.stderr.on('data', (d: Buffer) => console.error('[extract]', d.toString()));
-            proc.on('close', () => resolve());
-            proc.on('error', () => resolve());
-          });
+
+          if (fs.existsSync(clipPath) && fs.statSync(clipPath).size > 100) extractedPaths.push({ filePath: clipPath, name: clipName });
         }
 
-        if (fs.existsSync(clipPath) && fs.statSync(clipPath).size > 100) extractedPaths.push({ filePath: clipPath, name: clipName });
-      }
+        if (extractedPaths.length === 0) {
+          extractJobs.set(progressId, { current: selections.length, total: selections.length, done: true, error: 'No clips were extracted. Make sure thumbnails finished loading.' });
+          return;
+        }
 
-      if (extractedPaths.length === 0) {
-        return res.status(400).json({ error: 'No clips were extracted. Please wait for the thumbnails to finish loading, then try again.' });
+        // Write ZIP to a temp file
+        const zipPath = path.join(jobDir, 'clips.zip');
+        await new Promise<void>((resolve, reject) => {
+          const out = fs.createWriteStream(zipPath);
+          const archive = archiver('zip', { zlib: { level: 6 } });
+          archive.on('error', reject);
+          out.on('close', resolve);
+          archive.pipe(out);
+          for (const c of extractedPaths) archive.file(c.filePath, { name: c.name });
+          archive.finalize();
+        });
+        extractJobs.set(progressId, { current: selections.length, total: selections.length, done: true, zipPath });
+      } catch (err) {
+        console.error('[extract-zip] error:', err);
+        extractJobs.set(progressId, { current: 0, total: selections.length, done: true, error: 'Extraction failed.' });
       }
+    })();
+  });
 
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', 'attachment; filename=picker_clips.zip');
-      const archive = archiver('zip', { zlib: { level: 6 } });
-      archive.on('error', (err) => { console.error('[zip] archive error:', err); if (!res.headersSent) res.status(500).end(); });
-      archive.on('end', () => {
-        try { fs.rmSync(jobDir, { recursive: true, force: true }); } catch {}
-      });
-      archive.pipe(res);
-      for (const c of extractedPaths) archive.file(c.filePath, { name: c.name });
-      archive.finalize();
-    } catch (err) {
-      console.error('[extract-zip] unhandled error:', err);
-      if (!res.headersSent) res.status(500).json({ error: 'Extraction failed' });
-    }
+  app.get('/api/picker/extract-progress/:id', (req, res) => {
+    const job = extractJobs.get(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Not found' });
+    res.json(job);
+  });
+
+  app.get('/api/picker/extract-download/:id', (req, res) => {
+    const job = extractJobs.get(req.params.id);
+    if (!job || !job.done || !job.zipPath || !fs.existsSync(job.zipPath)) return res.status(404).json({ error: 'Not ready' });
+    const zipPath = job.zipPath;
+    extractJobs.delete(req.params.id);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename=picker_clips.zip');
+    const stream = fs.createReadStream(zipPath);
+    stream.pipe(res);
+    stream.on('close', () => { try { fs.rmSync(path.dirname(zipPath), { recursive: true, force: true }); } catch {} });
   });
   // ── End Picker Routes ──────────────────────────────────────────────
 
