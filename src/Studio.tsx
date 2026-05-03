@@ -396,7 +396,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                     <Film className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
                     <span className="text-xs text-zinc-400 font-mono truncate flex-1 min-w-0" title={video.url}>{shortUrl(video.url)}</span>
                     {video.credit && (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">{video.credit}</span>
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">{video.credit}</span>
                     )}
                     {statusBadge(video.status)}
                     {video.duration && (
