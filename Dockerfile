@@ -19,7 +19,7 @@ COPY . .
 RUN npm run build
 
 ENV NODE_ENV=production
-EXPOSE 3000
-ENV PORT=3000
+ENV PORT=7860
+EXPOSE 7860
 
 CMD ["npm", "start"]
