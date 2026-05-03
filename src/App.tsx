@@ -37,8 +37,6 @@ class ErrorBoundary extends (React.Component as any) {
 function ClipCard({ clip, index, selected, onToggle }: {
   key?: React.Key | null; clip: string; index: number; selected: boolean; onToggle: () => void;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [playing, setPlaying] = useState(false);
   const clipName = clip.replace(/\.mp4$/, '').replace(/_/g, ' ').trim();
 
   return (
@@ -56,14 +54,9 @@ function ClipCard({ clip, index, selected, onToggle }: {
         </div>
       )}
       <div className="aspect-video bg-zinc-950 relative">
-        <video ref={videoRef} src={`/clips/${clip}`} poster={`/api/thumbnail/${clip}`}
-          className="w-full h-full object-cover cursor-pointer" playsInline preload="none"
-          controls={playing}
-          onClick={() => {
-            const v = videoRef.current; if (!v) return;
-            if (!playing) { v.play().catch(() => {}); setPlaying(true); }
-          }}
-          onEnded={() => setPlaying(false)}
+        <video src={`/clips/${clip}`} poster={`/api/thumbnail/${clip}`}
+          className="w-full h-full object-cover" playsInline preload="none"
+          controls
         />
       </div>
       <div className="px-3 py-2 flex items-center gap-2">
