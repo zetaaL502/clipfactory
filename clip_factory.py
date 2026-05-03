@@ -85,11 +85,8 @@ def _cookies_args():
 
 
 def _yt_dlp_js_args():
-    """Return extra yt-dlp JS runtime args if a local node.js is installed."""
-    args = []
-    if shutil.which("node"):
-        args += ["--js-runtimes", "node", "--remote-components", "ejs:github"]
-    return args
+    """Return extra yt-dlp JS runtime args (kept empty for compatibility)."""
+    return []
 
 
 async def get_video_duration_url(url):

@@ -19,13 +19,6 @@ except ImportError:
     FFMPEG_PATH = shutil.which("ffmpeg")
     FFPROBE_PATH = shutil.which("ffprobe")
 
-def _yt_dlp_js_opts():
-    opts = {}
-    if shutil.which("node"):
-        opts["js_runtimes"] = {"node": {}}
-        opts["remote_components"] = ["ejs:github"]
-    return opts
-
 
 def write_status(path, data):
     with open(path, 'w') as f:
@@ -101,7 +94,7 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
         'socket_timeout': 30,
         'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
     }
-    ydl_opts.update(_yt_dlp_js_opts())
+
     if os.path.exists(cookies_file):
         ydl_opts['cookiefile'] = cookies_file
 

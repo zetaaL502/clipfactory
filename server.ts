@@ -250,8 +250,13 @@ asyncio.run(main())
     fs.writeFileSync(path.join(jobDir, 'urls.json'), JSON.stringify({ urls, urlCredits: urlCredits || [], duration, credit }));
 
     const proc = spawn('python3', ['picker.py', jobDir]);
-    proc.stdout.on('data', d => console.log('[picker]', d.toString()));
-    proc.stderr.on('data', d => console.error('[picker]', d.toString()));
+    const appendLog = (prefix: string, data: Buffer) => {
+      const line = `[${prefix}] ${data.toString().trim()}`;
+      console.log(line);
+      fs.appendFileSync(LOG_FILE, line + '\n');
+    };
+    proc.stdout.on('data', d => appendLog('picker', d));
+    proc.stderr.on('data', d => appendLog('picker', d));
 
     res.json({ jobId });
   });
@@ -382,24 +387,34 @@ asyncio.run(main())
             sourceArg = url;
           }
 
+          const logExtract = (prefix: string, data: Buffer) => {
+            const line = `[${prefix}] ${data.toString().trim()}`;
+            console.log(line);
+            fs.appendFileSync(LOG_FILE, line + '\n');
+          };
+          fs.appendFileSync(LOG_FILE, `[extract] Clip ${i + 1}/${selections.length}: t=${sel.timestamp}s dur=${clipDuration}s → ${clipName}\n`);
           await new Promise<void>(resolve => {
             const python = process.platform === 'win32' ? 'python' : 'python3';
             const creditArg = (credit as string) || '';
             const fontSizeArg = String(creditSize || 11);
             const proc = spawn(python, ['picker_extract.py', sourceArg, String(sel.timestamp), String(clipDuration), clipPath, creditArg, fontSizeArg]);
-            proc.stdout.on('data', (d: Buffer) => console.log('[extract]', d.toString()));
-              proc.stderr.on('data', (d: Buffer) => console.error('[extract]', d.toString()));
-              proc.on('close', () => resolve());
-              proc.on('error', () => resolve());
-            });
+            proc.stdout.on('data', (d: Buffer) => logExtract('extract', d));
+            proc.stderr.on('data', (d: Buffer) => logExtract('extract', d));
+            proc.on('close', () => resolve());
+            proc.on('error', () => resolve());
+          });
 
           if (fs.existsSync(clipPath) && fs.statSync(clipPath).size > 100) extractedPaths.push({ filePath: clipPath, name: clipName });
         }
 
         if (extractedPaths.length === 0) {
-          extractJobs.set(progressId, { current: selections.length, total: selections.length, done: true, error: 'No clips were extracted. Make sure thumbnails finished loading.' });
+          const errMsg = 'No clips were extracted. Make sure thumbnails finished loading.';
+          fs.appendFileSync(LOG_FILE, `[extract] ERROR: ${errMsg}\n`);
+          extractJobs.set(progressId, { current: selections.length, total: selections.length, done: true, error: errMsg });
           return;
         }
+
+        fs.appendFileSync(LOG_FILE, `[extract] ${extractedPaths.length}/${selections.length} clips extracted. Saving to library...\n`);
 
         // Copy extracted clips to main CLIPS_DIR
         if (!fs.existsSync(CLIPS_DIR)) {
@@ -409,9 +424,13 @@ asyncio.run(main())
           const destPath = path.join(CLIPS_DIR, c.name);
           try {
             fs.copyFileSync(c.filePath, destPath);
-            console.log(`[extract] Saved clip to library: ${c.name}`);
+            const msg = `[extract] Saved clip to library: ${c.name}`;
+            console.log(msg);
+            fs.appendFileSync(LOG_FILE, msg + '\n');
           } catch (e) {
-            console.error(`[extract] Failed to save clip ${c.name}: ${e}`);
+            const msg = `[extract] Failed to save clip ${c.name}: ${e}`;
+            console.error(msg);
+            fs.appendFileSync(LOG_FILE, msg + '\n');
           }
         }
 
