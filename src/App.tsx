@@ -49,12 +49,6 @@ function ClipCard({ clip, index, selected, onToggle }: {
       className={`group relative bg-zinc-900 border rounded-xl overflow-hidden transition-all
         ${selected ? 'border-blue-500 ring-1 ring-blue-500/30' : 'border-zinc-800 hover:border-zinc-700'}`}
     >
-      {!playing && (
-        <div className="absolute top-2 left-2 z-20" onClick={e => e.stopPropagation()}>
-          <input type="checkbox" checked={selected} onChange={onToggle}
-            className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-blue-600 cursor-pointer" />
-        </div>
-      )}
       <div className="aspect-video bg-zinc-950 relative">
         <video ref={videoRef} src={`/clips/${clip}`} poster={`/api/thumbnail/${clip}`}
           className="w-full h-full object-cover" playsInline preload="metadata"
@@ -65,14 +59,18 @@ function ClipCard({ clip, index, selected, onToggle }: {
         {!playing && (
           <button
             onClick={e => { e.stopPropagation(); videoRef.current?.play(); }}
-            className="absolute inset-0 w-full h-full flex items-center justify-center z-20 bg-transparent">
+            className="absolute inset-0 w-full h-full flex items-center justify-center bg-transparent">
             <Play className="w-10 h-10 text-white fill-white drop-shadow-lg" />
           </button>
         )}
       </div>
       <div className="px-3 py-2 flex items-center gap-2">
+        <input type="checkbox" checked={selected} onChange={onToggle}
+          onClick={e => e.stopPropagation()}
+          className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-blue-600 cursor-pointer shrink-0" />
         <p className="text-xs text-white truncate font-mono flex-1" title={clipName}>{clipName}</p>
-        <a href={`/clips/${clip}`} download={clip} className="shrink-0 p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-600 hover:text-white transition-all">
+        <a href={`/clips/${clip}`} download={clip} onClick={e => e.stopPropagation()}
+          className="shrink-0 p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-600 hover:text-white transition-all">
           <Download className="w-3.5 h-3.5" />
         </a>
       </div>
