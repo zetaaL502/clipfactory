@@ -128,7 +128,7 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None, 
             escaped = escape_drawtext(credit)
             drawtext_filter = (
                 f"drawtext=fontfile={FONT_PATH}:text='{escaped}'"
-                f":fontsize=19:fontcolor=white:borderw=2:bordercolor=black"
+                f":fontsize=18:fontcolor=white:borderw=2:bordercolor=black"
                 f":x=10:y=h-th-14"
             )
 
