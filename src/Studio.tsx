@@ -460,23 +460,6 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                     <p className="text-xs text-amber-200"><strong>YouTube on cloud:</strong> Often blocked. Use archive.org or Vimeo. For YouTube, run locally and paste cookies in Settings.</p>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-medium text-zinc-500 flex items-center gap-1.5">
-                        <Scissors className="w-3 h-3" /> Batch Lines
-                      </label>
-                      {feed.trim() && (
-                        <span className="text-[11px] text-zinc-600 font-mono">
-                          {feed.trim().split('\n').filter(l => l.trim() && !l.trim().startsWith('#')).length} line(s)
-                        </span>
-                      )}
-                    </div>
-                    <textarea value={feed} onChange={e => setFeed(e.target.value)}
-                      placeholder={"# Single clip at 2:30\nhttps://archive.org/... , 30s , 2:30 , @BBC\n\n# Chunk entire video\nhttps://archive.org/... , 2min , @CNN\n\n# 5 random clips\nhttps://archive.org/... , 30s , random:5"}
-                      rows={7}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 font-mono text-sm focus:ring-1 focus:ring-blue-500/60 outline-none resize-none text-zinc-200 placeholder:text-zinc-700" />
-                  </div>
-
                   <div className="flex items-center gap-3 flex-wrap">
                     <button onClick={handleBatchRun} disabled={isBatchRunning || !feed.trim()}
                       className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white px-5 py-2 rounded-xl font-semibold text-sm transition-all shadow-md shadow-emerald-500/20 active:scale-95">
