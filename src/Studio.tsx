@@ -105,88 +105,114 @@ function ThumbCard({
   playing: boolean; onPlay: () => void; onStop: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const durInputRef = useRef<HTMLInputElement>(null);
+  const [editingDur, setEditingDur] = useState(false);
   const isSelected = selectionIndex !== null;
+  const effectiveDurSecs = durationVal.trim() ? parseDurationSecs(durationVal) : clipDurationSecs;
+  const durLabel = shortDur(effectiveDurSecs);
 
   useEffect(() => {
     const v = videoRef.current;
     if (!v || !playing) return;
     v.currentTime = thumb.timestamp;
     v.play().catch(() => {});
-    const check = () => { if (v.currentTime >= thumb.timestamp + clipDurationSecs) { v.pause(); onStop(); } };
+    const check = () => { if (v.currentTime >= thumb.timestamp + effectiveDurSecs) { v.pause(); onStop(); } };
     v.addEventListener('timeupdate', check);
     return () => v.removeEventListener('timeupdate', check);
-  }, [playing, thumb.timestamp, clipDurationSecs, onStop]);
+  }, [playing, thumb.timestamp, effectiveDurSecs, onStop]);
 
   useEffect(() => {
     if (!playing) { const v = videoRef.current; if (v) { v.pause(); v.currentTime = thumb.timestamp; } }
   }, [playing, thumb.timestamp]);
 
+  useEffect(() => {
+    if (editingDur) durInputRef.current?.focus();
+  }, [editingDur]);
+
   return (
-    <div className={`relative rounded-xl overflow-hidden border-2 transition-all select-none flex flex-col
-      ${playing
-        ? 'border-emerald-500 ring-2 ring-emerald-500/20'
-        : isSelected
-          ? 'border-blue-500 ring-2 ring-blue-500/30'
-          : 'border-zinc-700 hover:border-zinc-500'}`}
+    <div
+      onClick={onSelect}
+      className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all select-none flex flex-col active:scale-[0.97]
+        ${playing
+          ? 'border-emerald-500 ring-2 ring-emerald-500/20'
+          : isSelected
+            ? 'border-blue-500 ring-2 ring-blue-500/40 shadow-lg shadow-blue-500/20'
+            : 'border-zinc-700 hover:border-zinc-500'}`}
     >
       {/* Selection order badge — top-left */}
       {isSelected && (
-        <div className="absolute top-1.5 left-1.5 z-20 w-5 h-5 rounded-full bg-blue-600 border border-blue-400 flex items-center justify-center text-[9px] font-bold text-white shadow">
+        <div className="absolute top-1.5 left-1.5 z-30 w-5 h-5 rounded-full bg-blue-600 border border-blue-400 flex items-center justify-center text-[9px] font-bold text-white shadow-md">
           {selectionIndex + 1}
         </div>
       )}
 
-      {/* Thumbnail / video */}
-      <div className="relative">
+      {/* Duration badge — top-right, tap to edit */}
+      <div
+        className="absolute top-1.5 right-1.5 z-30"
+        onClick={e => e.stopPropagation()}
+      >
+        {editingDur ? (
+          <input
+            ref={durInputRef}
+            type="text"
+            value={durationVal}
+            onChange={e => onDurationChange(e.target.value)}
+            onBlur={() => setEditingDur(false)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setEditingDur(false); }}
+            list="duration-suggestions"
+            placeholder={shortDur(clipDurationSecs)}
+            className="w-16 text-center text-[10px] font-mono bg-zinc-900 border border-blue-500 rounded-full px-2 py-0.5 outline-none text-blue-200 shadow-lg"
+          />
+        ) : (
+          <button
+            onClick={() => setEditingDur(true)}
+            title="Tap to override clip duration"
+            className={`text-[10px] font-mono px-2 py-0.5 rounded-full border transition-all hover:scale-105 active:scale-95 shadow
+              ${durationVal.trim()
+                ? 'bg-blue-600/40 border-blue-400/70 text-blue-200'
+                : 'bg-black/70 border-zinc-600 text-zinc-300 hover:border-zinc-400'}`}
+          >
+            {durLabel}
+          </button>
+        )}
+      </div>
+
+      {/* Thumbnail / video — click here for play only */}
+      <div className="relative" onClick={e => e.stopPropagation()}>
         {playing ? (
           <video ref={videoRef} src={`/api/picker/video/${jobId}/${videoIndex}`}
             className="w-full aspect-video object-cover bg-black" playsInline onEnded={onStop} />
         ) : (
           <img src={`/api/picker/thumb/${jobId}/${videoIndex}/${thumb.file}`}
-            alt={`from ${thumb.label}`} className="w-full aspect-video object-cover" loading="lazy" />
+            alt={`at ${thumb.label}`} className="w-full aspect-video object-cover" loading="lazy" />
         )}
 
-        {/* Play/stop overlay */}
-        <div className="absolute inset-0 flex items-center justify-center" onClick={playing ? onStop : onPlay}>
-          <div className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+        {/* Selected tint overlay */}
+        {isSelected && !playing && (
+          <div className="absolute inset-0 bg-blue-500/15 pointer-events-none" />
+        )}
+
+        {/* Play / stop overlay */}
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          onClick={playing ? onStop : onPlay}
+        >
+          <div className={`w-9 h-9 rounded-full bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-opacity
+            ${playing ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}>
             {playing
-              ? <Square className="w-4 h-4 text-white fill-white" />
-              : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
+              ? <Square className="w-3.5 h-3.5 text-white fill-white" />
+              : <Play className="w-3.5 h-3.5 text-white fill-white ml-0.5" />}
           </div>
         </div>
       </div>
 
-      {/* Bottom controls */}
-      <div className={`flex items-center gap-1 px-2 py-1.5 ${isSelected ? 'bg-blue-900/40' : 'bg-zinc-900'}`}>
-        {/* Timestamp */}
-        <span className="text-[10px] font-mono text-zinc-500 shrink-0">{thumb.label}</span>
-
-        {/* Per-clip duration input */}
-        <input
-          type="text"
-          value={durationVal}
-          onChange={e => onDurationChange(e.target.value)}
-          onClick={e => e.stopPropagation()}
-          list="duration-suggestions"
-          placeholder={shortDur(clipDurationSecs)}
-          title="Clip duration (overrides global)"
-          className={`w-0 flex-1 min-w-0 bg-transparent border-b text-[10px] font-mono text-center outline-none transition-colors placeholder:text-zinc-600
-            ${isSelected
-              ? 'border-blue-500/60 text-blue-200 placeholder:text-blue-400/50'
-              : 'border-zinc-700 text-zinc-300 focus:border-zinc-500'}`}
-        />
-
-        {/* SELECT / DESELECT button */}
-        <button
-          onClick={e => { e.stopPropagation(); onSelect(); }}
-          className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded transition-all active:scale-95
-            ${isSelected
-              ? 'bg-blue-600 hover:bg-red-600/80 text-white'
-              : 'bg-zinc-700 hover:bg-blue-600 text-zinc-300 hover:text-white'}`}
-          title={isSelected ? 'Deselect' : 'Add to download queue'}
-        >
-          {isSelected ? '✓ SEL' : 'SELECT'}
-        </button>
+      {/* Bottom bar — timestamp only */}
+      <div className={`flex items-center justify-between px-2.5 py-1.5 transition-colors
+        ${isSelected ? 'bg-blue-900/50' : 'bg-zinc-900'}`}>
+        <span className="text-[10px] font-mono text-zinc-400">{thumb.label}</span>
+        {isSelected
+          ? <span className="text-[10px] font-semibold text-blue-400">✓</span>
+          : <span className="text-[10px] text-zinc-700">tap</span>}
       </div>
     </div>
   );
