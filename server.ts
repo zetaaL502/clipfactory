@@ -365,18 +365,20 @@ asyncio.run(main())
             ff.on('error', (e: Error) => { console.error('[extract-ffmpeg] error:', e); resolve(); });
           });
         } else {
-          // Fallback: re-download via yt-dlp (requires network)
+          // Fallback: pass local path to picker_extract.py; if missing, fall back to URL
           const videoStatusPath = path.join(jobDir, String(sel.videoIndex), 'status.json');
-          if (!fs.existsSync(videoStatusPath)) continue;
-          let videoStatus: Record<string, unknown>;
-          try { videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8')); } catch { continue; }
-          const url = videoStatus.url as string | undefined;
-          if (!url) continue;
+          let sourceArg = localVideo; // picker_extract.py will use it if it's a file
+          if (!fs.existsSync(localVideo)) {
+            if (!fs.existsSync(videoStatusPath)) continue;
+            let videoStatus: Record<string, unknown>;
+            try { videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8')); } catch { continue; }
+            const url = videoStatus.url as string | undefined;
+            if (!url) continue;
+            sourceArg = url;
+          }
           await new Promise<void>(resolve => {
-            const effectiveCredit = (videoStatus.credit as string | null) || credit || null;
-            const args = ['picker_extract.py', url, String(sel.timestamp), String(clipDuration), clipPath];
-            if (effectiveCredit) args.push(effectiveCredit);
-            const proc = spawn('python3', args);
+            const python = process.platform === 'win32' ? 'python' : 'python3';
+            const proc = spawn(python, ['picker_extract.py', sourceArg, String(sel.timestamp), String(clipDuration), clipPath]);
             proc.stdout.on('data', (d: Buffer) => console.log('[extract]', d.toString()));
             proc.stderr.on('data', (d: Buffer) => console.error('[extract]', d.toString()));
             proc.on('close', () => resolve());
