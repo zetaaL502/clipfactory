@@ -489,11 +489,17 @@ asyncio.run(main())
 
   app.delete('/api/picker/cleanup-all', (req, res) => {
     try {
-      if (fs.existsSync(PICKER_DIR)) {
-        for (const entry of fs.readdirSync(PICKER_DIR)) {
-          fs.rmSync(path.join(PICKER_DIR, entry), { recursive: true, force: true });
+      const clearDir = (dir: string) => {
+        if (fs.existsSync(dir)) {
+          for (const entry of fs.readdirSync(dir)) {
+            fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
+          }
         }
-      }
+      };
+      clearDir(PICKER_DIR);
+      clearDir(CLIPS_DIR);
+      clearDir(THUMBNAILS_DIR);
+      fs.writeFileSync(LOG_FILE, '');
       res.json({ status: 'ok' });
     } catch (e) {
       res.status(500).json({ error: String(e) });

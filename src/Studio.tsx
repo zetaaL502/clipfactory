@@ -370,6 +370,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
       setSelectionOrder([]);
       setThumbDurations({});
       setPickerStatus(null);
+      onClipsUpdated?.();
     } finally {
       setIsClearing(false);
     }
