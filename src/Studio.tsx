@@ -202,6 +202,23 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
   const [isLoading, setIsLoading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractProgress, setExtractProgress] = useState<{ current: number; total: number } | null>(null);
+  const [extractElapsed, setExtractElapsed] = useState(0);
+  const extractStartRef = useRef<number | null>(null);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (isExtracting) {
+      extractStartRef.current = Date.now();
+      setExtractElapsed(0);
+      elapsedTimerRef.current = setInterval(() => {
+        setExtractElapsed(Math.floor((Date.now() - (extractStartRef.current ?? Date.now())) / 1000));
+      }, 1000);
+    } else {
+      if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
+      setExtractElapsed(0);
+    }
+    return () => { if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current); };
+  }, [isExtracting]);
   const [thumbStart, setThumbStart] = useState<Record<number, number>>({});
   const [thumbSeekVal, setThumbSeekVal] = useState<Record<number, string>>({});
   const [thumbSeekErr, setThumbSeekErr] = useState<Record<number, boolean>>({});
@@ -557,16 +574,26 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                 <button onClick={deselectAll} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all">
                   <X className="w-3.5 h-3.5" /> Clear
                 </button>
-                <button onClick={downloadZip} disabled={isExtracting}
-                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white px-5 py-2 rounded-xl font-semibold text-sm transition-all shadow-md shadow-emerald-500/20 active:scale-95">
-                  {isExtracting
-                    ? <><Loader2 className="w-4 h-4 animate-spin" />
-                        {extractProgress
-                          ? `Cutting ${extractProgress.current + 1} of ${extractProgress.total}…`
-                          : 'Starting…'}
-                      </>
-                    : <><Download className="w-4 h-4" /> Download ZIP</>}
-                </button>
+                <div className="flex flex-col items-end gap-1">
+                  <button onClick={downloadZip} disabled={isExtracting}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white px-5 py-2 rounded-xl font-semibold text-sm transition-all shadow-md shadow-emerald-500/20 active:scale-95">
+                    {isExtracting
+                      ? <><Loader2 className="w-4 h-4 animate-spin" />
+                          {extractProgress
+                            ? `Cutting ${extractProgress.current + 1} of ${extractProgress.total}…`
+                            : 'Starting…'}
+                        </>
+                      : <><Download className="w-4 h-4" /> Download ZIP</>}
+                  </button>
+                  {isExtracting && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      {extractProgress
+                        ? `clip ${extractProgress.current + 1}/${extractProgress.total} · ${extractElapsed}s elapsed`
+                        : `starting · ${extractElapsed}s`}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </motion.div>
