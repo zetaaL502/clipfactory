@@ -1,0 +1,27 @@
+
+[extract-ffmpeg] ffmpeg version 8.1-full_build-www.gyan.dev
+ extract-ffmpeg]   libswresample   6.  3.100 /  6.  3.100
+   Duration: eg]     creation_time   : 2021-11-08T17:45:08.000000Z
+ extract-ffmpeg]       handler_name    : ISO Media file produced by Google Inc. Created on: 11/08/2021.
+ extract-ffmpeg]   Stream #0:0 -> #0:0 (h264 (native) -> h264 (libx264))
+ extract-ffmpeg] Press [q] to stop, [?] for help
+[extract-ffmpeg] [libx264 @ 000001558dfdd7c0]
+ extract-ffmpeg]  using SAR=1/1
+ extract-ffmpeg] [libx264 @ 000001558dfdd7c0] using cpu capabilities: MMX2 SSE2Fast SSSE3 SSE4.2
+[extract-ffmpeg] [libx264 @ 000001558dfdd7c0]
+[extract-ffmpeg] [libx264 @ 000001558dfdd7c0] 264 - core 165 r3223 0480cb0 - H.264/MPEG-4 AVC codec - Copyleft 2003-2025 - http://www.videolan.org/x264.html - options: cabac=1 ref=2 deblock=1:0:0 analyse=0x3:0x113 me=hex subme=6 psy=1 psy_rd=1.00:0.00 mixed_ref=1 me_range=16 chroma_me=1 trellis=1 8x8dct=1 cqm=0 deadzone=21,11 fast_pskip=1 chroma_qp_offset=-2 threads=3 lookahead_threads=1 sliced_threads=0 nr=0 decimate=1 interlaced=0 bluray_compat=0 constrained_intra=0 bframes=3 b_pyramid=2 b_adapt=1 b_bias=0 direct=1 weightb=1 open_gop=0 weightp=1 keyint=250 keyint_min=25 scenecut=40 intra_refresh=0 rc_lookahead=30 rc=cr  mbtree=1 crf=23.0 qcomp=0.60 qpmin=0 qpmax=69 qpstep=4 ip_ratio=1.40 aq=1:1.00
+ extract-ffmpeg]     major_brand     : mp42
+ extract-ffmpeg]       CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+[extract-ffmpeg] frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:00.50    
+[extract-ffmpeg] 
+[extract-ffmpeg] frame=   34 fps= 31 q=28.0 size=       0KiB time=00:00:01.28 bitrate=   0.3kbits/s speed=1.17x elapsed=0:00:01.09    
+[extract-ffmpeg] frame=   71 fps= 44 q=28.0 size=       0KiB time=00:00:02.76 bitrate=   0.1kbits/s speed= 1.7x elapsed=0:00:01.62    
+[extract-ffmpeg] frame=  108 fps= 50 q=28.0 size=       0KiB time=00:00:04.24 bitrate=   0.1kbits/s speed=1.97x elapsed=0:00:02.14    
+[extract-ffmpeg] frame=  146 fps= 54 q=28.0 size=       0KiB time=00:00:05.76 bitrate=   0.1kbits/s speed=2.13x elapsed=0:00:02.70    
+[extract-ffmpeg] frame=  167 fps= 52 q=28.0 size=     256KiB time=00:00:06.60 bitrate= 317.8kbits/s speed=2.04x elapsed=0:00:03.22    
+[extract-ffmpeg] frame=  189 fps= 50 q=28.0 size=     256KiB time=00:00:07.48 bitrate= 280.4kbits/s speed=1.97x elapsed=0:00:03.79    
+[extract-ffmpeg] frame=  224 fps= 52 q=28.0 size=     256KiB time=00:00:08.88 bitrate= 236.2kbits/s speed=2.06x elapsed=0:00:04.30    
+[extract-ffmpeg] [mp4 @ 000001558dfde580]
+ extract-ffmpeg]  Starting second pass: moving the moov atom to the beginning of the file
+[extract-ffmpeg] [out#0/mp4 @ 000001558dfde480]
+ extract-ffmpeg] [libx264 @ 000001558dfdd7c0] kb/s:312.81
