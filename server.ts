@@ -407,7 +407,14 @@ asyncio.run(main())
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.REPLIT_DEV_DOMAIN ? {
+          host: process.env.REPLIT_DEV_DOMAIN,
+          clientPort: 443,
+          protocol: 'wss',
+        } : true,
+      },
       appType: "spa",
     });
     app.use(vite.middlewares);
