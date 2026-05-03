@@ -106,7 +106,7 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None, 
     try:
         proc = await asyncio.create_subprocess_exec(
             ytdlp_path,
-            "-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+            "-f", "bestvideo+bestaudio/best",
             "--get-url", "--no-warnings", "--no-playlist",
             "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "--extractor-args", "youtube:player_client=android,web",
@@ -128,7 +128,7 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None, 
             escaped = escape_drawtext(credit)
             drawtext_filter = (
                 f"drawtext=fontfile={FONT_PATH}:text='{escaped}'"
-                f":fontsize=18:fontcolor=white:borderw=2:bordercolor=black"
+                f":fontsize=16:fontcolor=white:borderw=2:bordercolor=black"
                 f":x=10:y=h-th-14"
             )
 
