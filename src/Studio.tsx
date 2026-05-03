@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Film, Link, Clock, AtSign, Download, Loader2, AlertCircle,
-  CheckCircle2, X, Play, Square, ChevronRight, ChevronLeft,
-  Power, ChevronDown, Zap, Trash2, CheckSquare, MinusSquare,
-  Scissors, CornerRightDown
+  CheckCircle2, X, ChevronRight, ChevronLeft,
+  Trash2, CheckSquare, MinusSquare,
+  CornerRightDown
 } from 'lucide-react';
 
 interface Thumbnail { file: string; timestamp: number; label: string; }
@@ -82,48 +82,29 @@ function statusBadge(status: VideoData['status']) {
 }
 
 function ThumbCard({
-  thumb, videoIndex, jobId, clipDurationSecs,
+  thumb, clipDurationSecs,
   selectionIndex, onSelect,
   durationVal, onDurationChange,
-  playing, onPlay, onStop,
 }: {
   key?: React.Key | null;
-  thumb: Thumbnail; videoIndex: number; jobId: string; clipDurationSecs: number;
+  thumb: Thumbnail; clipDurationSecs: number;
   selectionIndex: number | null;
   onSelect: () => void;
   durationVal: string;
   onDurationChange: (v: string) => void;
-  playing: boolean; onPlay: () => void; onStop: () => void;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
   const isSelected = selectionIndex !== null;
   const effectiveDurSecs = durationVal.trim() ? parseDurationSecs(durationVal) : clipDurationSecs;
   const durLabel = shortDur(effectiveDurSecs);
   const hasCustomDur = durationVal.trim().length > 0;
 
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v || !playing) return;
-    v.currentTime = thumb.timestamp;
-    v.play().catch(() => {});
-    const check = () => { if (v.currentTime >= thumb.timestamp + effectiveDurSecs) { v.pause(); onStop(); } };
-    v.addEventListener('timeupdate', check);
-    return () => v.removeEventListener('timeupdate', check);
-  }, [playing, thumb.timestamp, effectiveDurSecs, onStop]);
-
-  useEffect(() => {
-    if (!playing) { const v = videoRef.current; if (v) { v.pause(); v.currentTime = thumb.timestamp; } }
-  }, [playing, thumb.timestamp]);
-
   return (
     <div
       onClick={onSelect}
       className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all select-none flex flex-col
-        ${playing
-          ? 'border-emerald-500 ring-2 ring-emerald-500/20'
-          : isSelected
-            ? 'border-blue-500 ring-2 ring-blue-500/30'
-            : 'border-zinc-800 hover:border-zinc-600'}`}
+        ${isSelected
+          ? 'border-blue-500 ring-2 ring-blue-500/30'
+          : 'border-zinc-800 hover:border-zinc-600'}`}
     >
       {/* Top-left: order badge */}
       {isSelected && (
@@ -138,25 +119,11 @@ function ThumbCard({
         {durLabel}
       </div>
 
-      {/* Thumbnail / video */}
-      <div className="relative bg-black group/thumb"
-        onClick={e => { e.stopPropagation(); playing ? onStop() : onPlay(); }}>
-        {playing ? (
-          <video ref={videoRef} src={`/api/picker/video/${jobId}/${videoIndex}`}
-            className="w-full aspect-video object-cover bg-black block" playsInline onEnded={onStop} />
-        ) : (
-          <img src={`/thumbnails/${thumb.file}`}
-            alt={`at ${thumb.label}`} className="w-full aspect-video object-cover block bg-black" loading="eager" />
-        )}
-        {isSelected && !playing && <div className="absolute inset-0 bg-blue-500/15 pointer-events-none" />}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className={`w-9 h-9 rounded-full bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-opacity
-            ${playing ? 'opacity-100' : 'opacity-0 group-hover/thumb:opacity-100'}`}>
-            {playing
-              ? <Square className="w-3.5 h-3.5 text-white fill-white" />
-              : <Play className="w-3.5 h-3.5 text-white fill-white ml-0.5" />}
-          </div>
-        </div>
+      {/* Thumbnail */}
+      <div className="relative bg-black">
+        <img src={`/thumbnails/${thumb.file}`}
+          alt={`at ${thumb.label}`} className="w-full aspect-video object-cover block bg-black" loading="eager" />
+        {isSelected && <div className="absolute inset-0 bg-blue-500/15 pointer-events-none" />}
       </div>
 
       {/* Bottom bar */}
@@ -197,7 +164,6 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
 
   const [selectionOrder, setSelectionOrder] = useState<string[]>([]);
   const [thumbDurations, setThumbDurations] = useState<Record<string, string>>({});
-  const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [pickerStatus, setPickerStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -226,7 +192,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
     setPickerStatus(null); setIsLoading(true);
     setSelectionOrder([]); setThumbDurations({});
     setThumbStart({}); setThumbSeekVal({}); setThumbSeekErr({});
-    setVideos([]); setJobId(null); setPlayingKey(null);
+    setVideos([]); setJobId(null);
     try {
       const res = await fetch('/api/picker/start', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -246,9 +212,6 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
     const k = selKey(vi, ts);
     setSelectionOrder(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]);
   }, []);
-
-  const handlePlay = useCallback((vi: number, ts: number) => setPlayingKey(selKey(vi, ts)), []);
-  const handleStop = useCallback(() => setPlayingKey(null), []);
 
   const applySeek = (vi: number, thumbs: Thumbnail[], raw: string) => {
     const secs = parseSeekTime(raw);
@@ -466,15 +429,12 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                           const rawDur = thumbDurations[k] || '';
                           const effectiveDurSecs = rawDur.trim() ? parseDurationSecs(rawDur) : globalDurSecs;
                           return (
-                            <ThumbCard key={k} thumb={thumb} videoIndex={video.index} jobId={jobId}
+                            <ThumbCard key={k} thumb={thumb}
                               clipDurationSecs={effectiveDurSecs}
                               selectionIndex={selIdx === -1 ? null : selIdx}
                               onSelect={() => toggleSel(video.index, thumb.timestamp)}
                               durationVal={rawDur}
                               onDurationChange={v => setThumbDurations(p => ({ ...p, [k]: v }))}
-                              playing={playingKey === k}
-                              onPlay={() => handlePlay(video.index, thumb.timestamp)}
-                              onStop={handleStop}
                             />
                           );
                         })}
