@@ -139,17 +139,17 @@ function ThumbCard({
       </div>
 
       {/* Thumbnail / video */}
-      <div className="relative" onClick={e => e.stopPropagation()}>
+      <div className="relative bg-black" onClick={e => e.stopPropagation()}>
         {playing ? (
           <video ref={videoRef} src={`/api/picker/video/${jobId}/${videoIndex}`}
-            className="w-full aspect-video object-cover bg-black" playsInline onEnded={onStop} />
+            className="w-full aspect-video object-cover bg-black block" playsInline onEnded={onStop} />
         ) : (
           <img src={`/thumbnails/${jobId}/${videoIndex}/${thumb.file}`}
-            alt={`at ${thumb.label}`} className="w-full aspect-video object-cover" loading="lazy" />
+            alt={`at ${thumb.label}`} className="w-full aspect-video object-cover block bg-black" loading="eager" />
         )}
         {isSelected && !playing && <div className="absolute inset-0 bg-blue-500/15 pointer-events-none" />}
-        <div className="absolute inset-0 flex items-center justify-center" onClick={playing ? onStop : onPlay}>
-          <div className="w-9 h-9 rounded-full bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-9 h-9 rounded-full bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center">
             {playing
               ? <Square className="w-3.5 h-3.5 text-white fill-white" />
               : <Play className="w-3.5 h-3.5 text-white fill-white ml-0.5" />}
