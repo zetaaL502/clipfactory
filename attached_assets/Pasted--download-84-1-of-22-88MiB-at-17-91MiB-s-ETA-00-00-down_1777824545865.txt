@@ -1,0 +1,65 @@
+[download]  84.1% of   22.88MiB at   17.91MiB/s ETA 00:00
+[download]  84.7% of   22.88MiB at   29.54MiB/s ETA 00:00
+[download]  85.8% of   22.88MiB at   43.07MiB/s ETA 00:00
+[download]  87.9% of   22.88MiB at   66.37MiB/s ETA 00:00
+[download]  92.3% of   22.88MiB at   73.32MiB/s ETA 00:00
+[download] 100.0% of   22.88MiB at  114.05MiB/s ETA 00:00
+[download] 100% of   22.88MiB in 00:00:00 at 28.25MiB/s  
+
+[picker] Traceback (most recent call last):
+  File "/workspaces/clipfactory/picker.py", line 218, in <module>
+    asyncio.run(main())
+  File "/home/codespace/.python/current/lib/python3.12/asyncio/runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/home/codespace/.python/current/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/codespace/.python/current/lib/python3.12/asyncio/base_events.py", line 684, in run_until_complete
+
+[picker]     return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/workspaces/clipfactory/picker.py", line 213, in main
+    await asyncio.gather(*tasks)
+  File "/workspaces/clipfactory/picker.py", line 158, in process_video
+    proc = await asyncio.create_subprocess_exec(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/codespace/.python/current/lib/python3.12/asyncio/subprocess.py", line 224, in create_subprocess_exec
+    transport, protocol = await loop.subprocess_exec(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/codespace/.python/current/lib/python3.12/asyncio/base_events.py", line 1728, in subprocess_exec
+    transport = await self._make_subprocess_transport(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/codespace/.python/current/lib/python3.12/asyncio/unix_events.py", line 211, in _make_subprocess_transport
+
+[picker]     transp = _UnixSubprocessTransport(self, protocol, args, shell,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/codespace/.python/current/lib/python3.12/asyncio/base_subprocess.py", line 36, in __init__
+
+[picker]     self._start(args=args, shell=shell, stdin=stdin, stdout=stdout,
+  File "/home/codespace/.python/current/lib/python3.12/asyncio/unix_events.py", line 820, in _start
+    self._proc = subprocess.Popen(
+                 ^^^^^^^^^^^^^^^^^
+  File "/home/codespace/.python/current/lib/python3.12/subprocess.py", line 1026, in __init__
+
+[picker]     self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/home/codespace/.python/current/lib/python3.12/subprocess.py", line 1950, in _execute_child
+
+[picker]     raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'
+
+3:30:15 PM [vite] (client) page reload clip_factory.py
+3:30:17 PM [vite] (client) page reload clip_factory.py (x2)
+3:30:19 PM [vite] (client) page reload clip_factory.py (x3)
+3:30:22 PM [vite] (client) page reload picker.py
+3:30:35 PM [vite] (client) page reload picker.py (x2)
+3:31:00 PM [vite] (client) page reload clip_factory.py
+3:31:00 PM [vite] (client) page reload picker.py
+3:31:04 PM [vite] (client) page reload picker.py (x2)
+3:31:07 PM [vite] (client) page reload picker.py (x3)
+3:31:11 PM [vite] (client) page reload picker.py (x4)
+3:31:14 PM [vite] (client) page reload picker.py (x5)
+3:32:37 PM [vite] (client) page reload test_clip.py
+3:32:45 PM [vite] (client) page reload test_clip.py (x2)
+@zetaaL502 ➜ /workspaces/clipfactory (main) $ 
+

@@ -492,6 +492,7 @@ asyncio.run(main())
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
+        allowedHosts: true,
         hmr: process.env.REPLIT_DEV_DOMAIN ? {
           host: process.env.REPLIT_DEV_DOMAIN,
           clientPort: 443,
