@@ -36,12 +36,19 @@ class ErrorBoundary extends (React.Component as any) {
   }
 }
 
-function ClipCard({ clip, index, selected, onToggle }: {
+function ClipCard({ clip, index, selected, onToggle, isPlaying, onPlay }: {
   key?: React.Key | null; clip: string; index: number; selected: boolean; onToggle: () => void;
+  isPlaying: boolean; onPlay: (clip: string) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [playing, setPlaying] = useState(false);
   const clipName = clip.replace(/\.mp4$/, '').replace(/_/g, ' ').trim();
+
+  React.useEffect(() => {
+    if (!isPlaying && videoRef.current && !videoRef.current.paused) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+    }
+  }, [isPlaying]);
 
   return (
     <motion.div
@@ -53,17 +60,16 @@ function ClipCard({ clip, index, selected, onToggle }: {
     >
       <div className="aspect-video bg-zinc-950 relative">
         <video ref={videoRef} src={`/clips/${clip}`} poster={`/api/thumbnail/${clip}`}
-          className={`w-full h-full object-cover ${playing ? '' : 'pointer-events-none'}`}
+          className={`w-full h-full object-cover ${isPlaying ? '' : 'pointer-events-none'}`}
           playsInline preload="metadata"
-          onPlay={() => setPlaying(true)}
-          onEnded={() => setPlaying(false)}
+          onEnded={() => onPlay('')}
         />
-        {!playing && (
+        {!isPlaying && (
           <button
             onClick={e => {
               e.stopPropagation();
-              setPlaying(true);
-              videoRef.current?.play().catch(() => setPlaying(false));
+              onPlay(clip);
+              videoRef.current?.play().catch(() => onPlay(''));
             }}
             className="absolute inset-0 w-full h-full flex items-center justify-center bg-transparent">
             <Play className="w-12 h-12 text-white fill-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]" />
@@ -95,6 +101,7 @@ function App() {
   const [cookiesExist, setCookiesExist] = useState(false);
   const [cookieValid, setCookieValid] = useState(true);
   const [cookieSaveStatus, setCookieSaveStatus] = useState<'idle'|'saved'|'cleared'>('idle');
+  const [playingClip, setPlayingClip] = useState('');
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   const groupedClips = React.useMemo(() => {
@@ -268,7 +275,7 @@ function App() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                     {groupClips.sort().map((clip, i) => (
-                      <ClipCard key={clip} clip={clip} index={i} selected={selectedClips.has(clip)} onToggle={() => toggleClip(clip)} />
+                      <ClipCard key={clip} clip={clip} index={i} selected={selectedClips.has(clip)} onToggle={() => toggleClip(clip)} isPlaying={playingClip === clip} onPlay={setPlayingClip} />
                     ))}
                   </div>
                 </div>
