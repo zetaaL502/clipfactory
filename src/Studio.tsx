@@ -196,6 +196,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
   const [urls, setUrls] = useState('');
   const [duration, setDuration] = useState('30');
   const [credit, setCredit] = useState('');
+  const [creditSize, setCreditSize] = useState(11);
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [videos, setVideos] = useState<VideoData[]>([]);
@@ -312,7 +313,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
       });
       const startRes = await fetch('/api/picker/extract-zip', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId, selections: sels, duration: globalDurSecs, credit: credit || null })
+        body: JSON.stringify({ jobId, selections: sels, duration: globalDurSecs, credit: credit || null, creditSize })
       });
       if (!startRes.ok) {
         let msg = 'Extraction failed';
@@ -395,6 +396,28 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
               <input type="text" value={credit} onChange={e => setCredit(e.target.value)}
                 placeholder="@yourchannel"
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500/60 text-zinc-200 placeholder:text-zinc-600" />
+              {/* Credit size slider */}
+              <div className="pt-1 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-zinc-500">Size</span>
+                  <input
+                    type="range" min={7} max={36} step={1} value={creditSize}
+                    onChange={e => setCreditSize(Number(e.target.value))}
+                    className="flex-1 h-1.5 accent-blue-500 cursor-pointer"
+                  />
+                  <span className="text-[11px] font-mono text-zinc-300 w-5 text-right">{creditSize}</span>
+                </div>
+                {/* Live preview */}
+                <div className="relative w-full rounded-lg overflow-hidden bg-zinc-950 border border-zinc-800" style={{ paddingBottom: '28.125%' }}>
+                  <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 to-zinc-950" />
+                  <div
+                    className="absolute bottom-0 left-0 px-1.5 py-0.5 font-bold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,1)]"
+                    style={{ fontSize: `${creditSize * 0.47}px`, lineHeight: 1.2, textShadow: '-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000' }}
+                  >
+                    {credit ? (credit.startsWith('@') ? credit : `@${credit}`) : '@yourchannel'}
+                  </div>
+                </div>
+              </div>
             </div>
 
             <button onClick={handleBrowse} disabled={isLoading || !urls.trim()}

@@ -98,7 +98,24 @@ async def get_video_duration_url(url):
         await log_msg("WARNING", f"Could not get video duration: {e}")
         return 0.0
 
-async def download_4k_clip(url, start_time, duration, output_path, credit=None, no_audio=False):
+def _find_font():
+    """Return a usable font path for ffmpeg drawtext, cross-platform."""
+    candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        r"C:\Windows\Fonts\arialbd.ttf",
+        r"C:\Windows\Fonts\arial.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/Library/Fonts/Arial Bold.ttf",
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+async def download_4k_clip(url, start_time, duration, output_path, credit=None, no_audio=False, font_size=11):
     """Fetch stream URL via yt-dlp then cut with FFmpeg. Optionally burn credit watermark."""
     ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
     ytdlp_path = shutil.which("yt-dlp") or "yt-dlp"
@@ -121,16 +138,23 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None, 
         if not urls:
             raise Exception(f"yt-dlp returned no URL. stderr: {stderr.decode()[:300]}")
 
-        FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        font_path = _find_font()
 
         drawtext_filter = ""
         if credit:
             escaped = escape_drawtext(credit)
-            drawtext_filter = (
-                f"drawtext=fontfile={FONT_PATH}:text='{escaped}'"
-                f":fontsize=11:fontcolor=white:borderw=1:bordercolor=black"
-                f":x=8:y=h-th-8"
-            )
+            if font_path:
+                drawtext_filter = (
+                    f"drawtext=fontfile='{font_path}':text='{escaped}'"
+                    f":fontsize={font_size}:fontcolor=white:borderw=1:bordercolor=black"
+                    f":x=8:y=h-th-8"
+                )
+            else:
+                drawtext_filter = (
+                    f"drawtext=text='{escaped}'"
+                    f":fontsize={font_size}:fontcolor=white:borderw=1:bordercolor=black"
+                    f":x=8:y=h-th-8"
+                )
 
         if len(urls) >= 2:
             video_url, audio_url = urls[0], urls[1]

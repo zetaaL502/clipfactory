@@ -335,7 +335,7 @@ asyncio.run(main())
   const extractJobs = new Map<string, { current: number; total: number; done: boolean; error?: string; zipPath?: string }>();
 
   app.post('/api/picker/extract-zip', (req, res) => {
-    const { jobId, selections, duration, credit } = req.body;
+    const { jobId, selections, duration, credit, creditSize } = req.body;
     if (!jobId || !Array.isArray(selections) || selections.length === 0) {
       return res.status(400).json({ error: 'Invalid request' });
     }
@@ -385,7 +385,9 @@ asyncio.run(main())
             }
             await new Promise<void>(resolve => {
               const python = process.platform === 'win32' ? 'python' : 'python3';
-              const proc = spawn(python, ['picker_extract.py', sourceArg, String(sel.timestamp), String(clipDuration), clipPath]);
+              const creditArg = (credit as string) || '';
+              const fontSizeArg = String(creditSize || 11);
+              const proc = spawn(python, ['picker_extract.py', sourceArg, String(sel.timestamp), String(clipDuration), clipPath, creditArg, fontSizeArg]);
               proc.stdout.on('data', (d: Buffer) => console.log('[extract]', d.toString()));
               proc.stderr.on('data', (d: Buffer) => console.error('[extract]', d.toString()));
               proc.on('close', () => resolve());
