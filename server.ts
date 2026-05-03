@@ -396,6 +396,32 @@ asyncio.run(main())
   });
   // ── End Picker Routes ──────────────────────────────────────────────
 
+  // Serve raw picker job video for preview
+  app.get('/picker-video/:jobId/:videoIndex', (req, res) => {
+    const jobId = path.basename(req.params.jobId);
+    const videoIndex = path.basename(req.params.videoIndex);
+    const videoPath = path.join(PICKER_DIR, jobId, videoIndex, 'video.mp4');
+    if (!fs.existsSync(videoPath)) return res.status(404).send('not found');
+    const stat = fs.statSync(videoPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+    if (range) {
+      const [startStr, endStr] = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(startStr, 10);
+      const end = endStr ? parseInt(endStr, 10) : fileSize - 1;
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': end - start + 1,
+        'Content-Type': 'video/mp4',
+      });
+      fs.createReadStream(videoPath, { start, end }).pipe(res);
+    } else {
+      res.writeHead(200, { 'Content-Length': fileSize, 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes' });
+      fs.createReadStream(videoPath).pipe(res);
+    }
+  });
+
   app.use('/clips', express.static(CLIPS_DIR, {
       setHeaders: (res, p) => {
           if (p.endsWith('.mp4')) {
