@@ -5,6 +5,7 @@ import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
+  const hmrDisabled = process.env.DISABLE_HMR === 'true';
   return {
     plugins: [react(), tailwindcss()],
     define: {
@@ -19,7 +20,11 @@ export default defineConfig(({mode}) => {
       port: 5000,
       host: '0.0.0.0',
       allowedHosts: true,
-      hmr: process.env.DISABLE_HMR === 'true' ? false : true,
+      hmr: hmrDisabled ? false : {
+        host: process.env.REPLIT_DEV_DOMAIN || 'localhost',
+        clientPort: 443,
+        protocol: 'wss',
+      },
       watch: {
         ignored: ['**/.local/**', '**/.cache/**', '**/picker_jobs/**', '**/clips/**', '**/node_modules/**'],
       },
