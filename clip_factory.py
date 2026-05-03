@@ -8,6 +8,12 @@ import shutil
 from datetime import datetime
 from yt_dlp import YoutubeDL
 
+try:
+    import imageio_ffmpeg
+    FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
+except ImportError:
+    FFMPEG_PATH = shutil.which("ffmpeg")
+
 TEMP_DIR = "temp_processing"
 CLIPS_DIR = "clips"
 LOG_FILE = "pipeline.log"
@@ -77,6 +83,15 @@ def _cookies_args():
     p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
     return ['--cookies', p] if os.path.exists(p) else []
 
+
+def _yt_dlp_js_args():
+    """Return extra yt-dlp JS runtime args if a local node.js is installed."""
+    args = []
+    if shutil.which("node"):
+        args += ["--js-runtimes", "node", "--remote-components", "ejs:github"]
+    return args
+
+
 async def get_video_duration_url(url):
     """Get total video duration in seconds via yt-dlp --dump-json."""
     ytdlp_path = shutil.which("yt-dlp") or "yt-dlp"
@@ -86,6 +101,7 @@ async def get_video_duration_url(url):
             "--dump-json", "--no-playlist", "--no-warnings",
             "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "--extractor-args", "youtube:player_client=android,web",
+            *_yt_dlp_js_args(),
             *_cookies_args(),
             url,
             stdout=asyncio.subprocess.PIPE,
@@ -97,6 +113,35 @@ async def get_video_duration_url(url):
     except Exception as e:
         await log_msg("WARNING", f"Could not get video duration: {e}")
         return 0.0
+
+
+async def _get_video_stream_urls(url):
+    """Try stream URL extraction with yt-dlp format fallbacks."""
+    ytdlp_path = shutil.which("yt-dlp") or "yt-dlp"
+    format_candidates = ["bestvideo+bestaudio/best", "best"]
+    last_err = ""
+    for fmt in format_candidates:
+        proc = await asyncio.create_subprocess_exec(
+            ytdlp_path,
+            "-f", fmt,
+            "--get-url", "--no-warnings", "--no-playlist",
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "--extractor-args", "youtube:player_client=android,web",
+            *_yt_dlp_js_args(),
+            *_cookies_args(),
+            url,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        last_err = stderr.decode().strip()
+        if proc.returncode == 0:
+            urls = [u.strip() for u in stdout.decode().strip().splitlines() if u.strip()]
+            if urls:
+                return urls
+        await log_msg("WARNING", f"yt-dlp format {fmt} failed for {url}: {last_err.splitlines()[-1] if last_err else 'no stderr'}")
+
+    raise Exception(f"yt-dlp failed to get URL for {url}. last stderr: {last_err}")
 
 def _find_font():
     """Return a usable font path for ffmpeg drawtext, cross-platform."""
@@ -117,27 +162,10 @@ def _find_font():
 
 async def download_4k_clip(url, start_time, duration, output_path, credit=None, no_audio=False, font_size=11):
     """Fetch stream URL via yt-dlp then cut with FFmpeg. Optionally burn credit watermark."""
-    ffmpeg_path = shutil.which("ffmpeg") or "ffmpeg"
-    ytdlp_path = shutil.which("yt-dlp") or "yt-dlp"
+    ffmpeg_path = FFMPEG_PATH or "ffmpeg"
 
     try:
-        proc = await asyncio.create_subprocess_exec(
-            ytdlp_path,
-            "-f", "bestvideo+bestaudio/best",
-            "--get-url", "--no-warnings", "--no-playlist",
-            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "--extractor-args", "youtube:player_client=android,web",
-            *_cookies_args(),
-            url,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-        urls = [u.strip() for u in stdout.decode().strip().splitlines() if u.strip()]
-
-        if not urls:
-            raise Exception(f"yt-dlp returned no URL. stderr: {stderr.decode()[:300]}")
-
+        urls = await _get_video_stream_urls(url)
         font_path = _find_font()
 
         drawtext_filter = ""

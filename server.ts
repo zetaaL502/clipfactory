@@ -121,19 +121,28 @@ async function startServer() {
   });
 
   const COOKIES_FILE = 'cookies.txt';
+  const cookieAuthMatcher = /(^|\s)(SAPISID|APISID|SID|HSID|SSID|__Secure-3PSID|__Secure-3PAPISID|__Secure-1PSIDTS|__Secure-3PSIDTS)(\s|$)/i;
+  const cookieFileValid = (content: string) => {
+    return cookieAuthMatcher.test(content) || /\.google\.com/i.test(content) || /accounts\.google\.com/i.test(content);
+  };
 
   app.get('/api/cookies', (req, res) => {
-    res.json({ exists: fs.existsSync(COOKIES_FILE) });
+    if (!fs.existsSync(COOKIES_FILE)) {
+      return res.json({ exists: false, content: '', valid: false });
+    }
+    const content = fs.readFileSync(COOKIES_FILE, 'utf-8');
+    res.json({ exists: true, content, valid: cookieFileValid(content) });
   });
 
   app.post('/api/cookies', (req, res) => {
     const { content } = req.body;
     if (!content || !content.trim()) {
       if (fs.existsSync(COOKIES_FILE)) fs.unlinkSync(COOKIES_FILE);
-      return res.json({ status: 'cleared' });
+      return res.json({ status: 'cleared', valid: false });
     }
-    fs.writeFileSync(COOKIES_FILE, content.trim() + '\n', 'utf-8');
-    res.json({ status: 'saved' });
+    const trimmed = content.trim() + '\n';
+    fs.writeFileSync(COOKIES_FILE, trimmed, 'utf-8');
+    res.json({ status: 'saved', valid: cookieFileValid(trimmed) });
   });
 
   app.get('/api/settings', (req, res) => {
@@ -361,39 +370,28 @@ asyncio.run(main())
           const clipPath = path.join(clipsDir, clipName);
           const localVideo = path.join(jobDir, String(sel.videoIndex), 'video.mp4');
 
-          if (fs.existsSync(localVideo)) {
-            await new Promise<void>(resolve => {
-              const ff = spawn('ffmpeg', [
-                '-y', '-ss', String(sel.timestamp), '-i', localVideo,
-                '-t', String(clipDuration), '-c:v', 'libx264', '-preset', 'fast',
-                '-crf', '23', '-an', '-movflags', '+faststart', clipPath
-              ]);
-              ff.stderr.on('data', (d: Buffer) => console.log('[extract-ffmpeg]', d.toString().split('\n').slice(-2).join(' ')));
-              ff.on('close', () => resolve());
-              ff.on('error', (e: Error) => { console.error('[extract-ffmpeg] error:', e); resolve(); });
-            });
-          } else {
+          // Always use Python script for clip extraction (handles FFmpeg path correctly)
+          let sourceArg = localVideo;
+          if (!fs.existsSync(localVideo)) {
             const videoStatusPath = path.join(jobDir, String(sel.videoIndex), 'status.json');
-            let sourceArg = localVideo;
-            if (!fs.existsSync(localVideo)) {
-              if (!fs.existsSync(videoStatusPath)) continue;
-              let videoStatus: Record<string, unknown>;
-              try { videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8')); } catch { continue; }
-              const url = videoStatus.url as string | undefined;
-              if (!url) continue;
-              sourceArg = url;
-            }
-            await new Promise<void>(resolve => {
-              const python = process.platform === 'win32' ? 'python' : 'python3';
-              const creditArg = (credit as string) || '';
-              const fontSizeArg = String(creditSize || 11);
-              const proc = spawn(python, ['picker_extract.py', sourceArg, String(sel.timestamp), String(clipDuration), clipPath, creditArg, fontSizeArg]);
-              proc.stdout.on('data', (d: Buffer) => console.log('[extract]', d.toString()));
+            if (!fs.existsSync(videoStatusPath)) continue;
+            let videoStatus: Record<string, unknown>;
+            try { videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8')); } catch { continue; }
+            const url = videoStatus.url as string | undefined;
+            if (!url) continue;
+            sourceArg = url;
+          }
+
+          await new Promise<void>(resolve => {
+            const python = process.platform === 'win32' ? 'python' : 'python3';
+            const creditArg = (credit as string) || '';
+            const fontSizeArg = String(creditSize || 11);
+            const proc = spawn(python, ['picker_extract.py', sourceArg, String(sel.timestamp), String(clipDuration), clipPath, creditArg, fontSizeArg]);
+            proc.stdout.on('data', (d: Buffer) => console.log('[extract]', d.toString()));
               proc.stderr.on('data', (d: Buffer) => console.error('[extract]', d.toString()));
               proc.on('close', () => resolve());
               proc.on('error', () => resolve());
             });
-          }
 
           if (fs.existsSync(clipPath) && fs.statSync(clipPath).size > 100) extractedPaths.push({ filePath: clipPath, name: clipName });
         }
@@ -401,6 +399,20 @@ asyncio.run(main())
         if (extractedPaths.length === 0) {
           extractJobs.set(progressId, { current: selections.length, total: selections.length, done: true, error: 'No clips were extracted. Make sure thumbnails finished loading.' });
           return;
+        }
+
+        // Copy extracted clips to main CLIPS_DIR
+        if (!fs.existsSync(CLIPS_DIR)) {
+          fs.mkdirSync(CLIPS_DIR, { recursive: true });
+        }
+        for (const c of extractedPaths) {
+          const destPath = path.join(CLIPS_DIR, c.name);
+          try {
+            fs.copyFileSync(c.filePath, destPath);
+            console.log(`[extract] Saved clip to library: ${c.name}`);
+          } catch (e) {
+            console.error(`[extract] Failed to save clip ${c.name}: ${e}`);
+          }
         }
 
         // Write ZIP to a temp file

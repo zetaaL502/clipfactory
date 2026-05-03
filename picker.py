@@ -11,6 +11,22 @@ import shutil
 from pathlib import Path
 from yt_dlp import YoutubeDL
 
+try:
+    import imageio_ffmpeg
+    FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
+    FFPROBE_PATH = None  # ffprobe not included in imageio_ffmpeg
+except ImportError:
+    FFMPEG_PATH = shutil.which("ffmpeg")
+    FFPROBE_PATH = shutil.which("ffprobe")
+
+def _yt_dlp_js_opts():
+    opts = {}
+    if shutil.which("node"):
+        opts["js_runtimes"] = {"node": {}}
+        opts["remote_components"] = ["ejs:github"]
+    return opts
+
+
 def write_status(path, data):
     with open(path, 'w') as f:
         json.dump(data, f)
@@ -22,7 +38,7 @@ def thumbnail_public_path(job_dir, video_index, filename):
     return str(target / filename)
 
 async def get_duration(video_path):
-    ffprobe = shutil.which("ffprobe") or "ffprobe"
+    ffprobe = FFPROBE_PATH or "ffprobe"
     try:
         proc = await asyncio.create_subprocess_exec(
             ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", video_path,
@@ -56,7 +72,7 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
     thumb_dir = os.path.join(video_dir, "thumbs")
     os.makedirs(thumb_dir, exist_ok=True)
     status_path = os.path.join(video_dir, "status.json")
-    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+    ffmpeg = FFMPEG_PATH or "ffmpeg"
 
     write_status(status_path, {"status": "downloading", "url": url, "thumbnails": []})
 
@@ -85,6 +101,7 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
         'socket_timeout': 30,
         'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
     }
+    ydl_opts.update(_yt_dlp_js_opts())
     if os.path.exists(cookies_file):
         ydl_opts['cookiefile'] = cookies_file
 

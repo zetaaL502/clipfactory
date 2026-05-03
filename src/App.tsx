@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import Studio from './Studio';
 
+const COOKIE_STORAGE_KEY = 'yt-dlp-cookies';
+
 class ErrorBoundary extends (React.Component as any) {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { error }; }
@@ -91,6 +93,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [cookieContent, setCookieContent] = useState('');
   const [cookiesExist, setCookiesExist] = useState(false);
+  const [cookieValid, setCookieValid] = useState(true);
   const [cookieSaveStatus, setCookieSaveStatus] = useState<'idle'|'saved'|'cleared'>('idle');
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -116,15 +119,48 @@ function App() {
   useEffect(() => { fetchData(); const t = setInterval(fetchData, 3000); return () => clearInterval(t); }, []);
   useEffect(() => { if (showLogs) logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs, showLogs]);
   useEffect(() => {
-    if (showSettings) fetch('/api/cookies').then(r => r.json()).then(d => setCookiesExist(d.exists)).catch(() => {});
+    const stored = window.localStorage.getItem(COOKIE_STORAGE_KEY);
+    if (stored) {
+      setCookieContent(stored);
+    }
+  }, []);
+  useEffect(() => {
+    window.localStorage.setItem(COOKIE_STORAGE_KEY, cookieContent);
+  }, [cookieContent]);
+  useEffect(() => {
+    if (!showSettings) return;
+    const currentCookieContent = cookieContent;
+    fetch('/api/cookies')
+      .then(r => r.json())
+      .then(async d => {
+        setCookiesExist(d.exists);
+        setCookieValid(d.valid ?? true);
+        if (d.exists && d.content && !currentCookieContent.trim()) {
+          setCookieContent(d.content);
+          window.localStorage.setItem(COOKIE_STORAGE_KEY, d.content);
+        }
+        if (!d.exists && currentCookieContent.trim()) {
+          const res = await fetch('/api/cookies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: currentCookieContent }) });
+          const saved = await res.json();
+          setCookiesExist(saved.status === 'saved');
+          setCookieValid(saved.valid ?? true);
+          if (saved.status === 'saved') setCookieSaveStatus('saved');
+          setTimeout(() => setCookieSaveStatus('idle'), 3000);
+        }
+      })
+      .catch(() => {});
   }, [showSettings]);
 
   const saveCookies = async () => {
     const res = await fetch('/api/cookies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: cookieContent }) });
     const d = await res.json();
     setCookiesExist(d.status === 'saved');
+    setCookieValid(d.valid ?? true);
     setCookieSaveStatus(d.status === 'saved' ? 'saved' : 'cleared');
-    if (d.status !== 'saved') setCookieContent('');
+    if (d.status !== 'saved') {
+      setCookieContent('');
+      window.localStorage.removeItem(COOKIE_STORAGE_KEY);
+    }
     setTimeout(() => setCookieSaveStatus('idle'), 3000);
   };
 
@@ -352,15 +388,32 @@ function App() {
                     {cookiesExist && <span className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full px-2 py-0.5">Active</span>}
                   </div>
                   <p className="text-xs text-zinc-400 leading-relaxed">
-                    YouTube blocks cloud downloads. Export cookies using the <span className="text-zinc-300">Get cookies.txt LOCALLY</span> browser extension and paste below.
+                    YouTube blocks cloud downloads. Export cookies using the <span className="text-zinc-300">Get cookies.txt LOCALLY</span> browser extension and paste or upload the file below.
                   </p>
+                  <input
+                    type="file"
+                    accept=".txt"
+                    onChange={async e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const text = await file.text();
+                      setCookieContent(text);
+                      setCookieValid(true);
+                    }}
+                    className="w-full text-xs bg-zinc-950 border border-zinc-700 rounded-xl p-3 text-zinc-300 file:text-zinc-300 file:bg-zinc-800 file:border file:border-zinc-700 file:rounded-md file:px-2 file:py-1"
+                  />
                   <textarea
                     value={cookieContent}
                     onChange={e => setCookieContent(e.target.value)}
                     placeholder={"# Netscape HTTP Cookie File\n# Export from browser using 'Get cookies.txt LOCALLY'\n\n.youtube.com\tTRUE\t/\t..."}
                     rows={5}
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl p-3 font-mono text-xs focus:ring-1 focus:ring-blue-500/50 outline-none resize-none text-zinc-300 placeholder:text-zinc-700"
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl p-3 font-mono text-xs focus:ring-1 focus:ring-blue-500/50 outline-none resize-none text-zinc-300 placeholder:text-zinc-700 mt-2"
                   />
+                  {!cookieValid && (
+                    <p className="text-xs text-rose-400 mt-1">
+                      Your saved cookies look incomplete. Export full browser cookies that include Google/YouTube auth cookies (e.g. google.com or accounts.google.com) and save again.
+                    </p>
+                  )}
                   <div className="flex items-center gap-3">
                     <button onClick={saveCookies}
                       className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all">
