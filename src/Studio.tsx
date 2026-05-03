@@ -144,7 +144,7 @@ function ThumbCard({
           <video ref={videoRef} src={`/api/picker/video/${jobId}/${videoIndex}`}
             className="w-full aspect-video object-cover bg-black" playsInline onEnded={onStop} />
         ) : (
-          <img src={`/api/picker/thumb/${jobId}/${videoIndex}/${thumb.file}`}
+          <img src={`/thumbnails/${jobId}/${videoIndex}/${thumb.file}`}
             alt={`at ${thumb.label}`} className="w-full aspect-video object-cover" loading="lazy" />
         )}
         {isSelected && !playing && <div className="absolute inset-0 bg-blue-500/15 pointer-events-none" />}

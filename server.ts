@@ -36,6 +36,7 @@ async function startServer() {
   const LOG_FILE = 'pipeline.log';
   const DIST_DIR = 'dist';
   const PICKER_DIR = 'picker_jobs';
+  const THUMBNAILS_DIR = 'thumbnails';
   const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
   app.use(express.json());
@@ -222,6 +223,11 @@ asyncio.run(main())
   if (!fs.existsSync(PICKER_DIR)) {
     fs.mkdirSync(PICKER_DIR, { recursive: true });
   }
+  if (!fs.existsSync(THUMBNAILS_DIR)) {
+    fs.mkdirSync(THUMBNAILS_DIR, { recursive: true });
+  }
+
+  app.use('/thumbnails', express.static(path.resolve(THUMBNAILS_DIR)));
 
   // ── Picker Routes ─────────────────────────────────────────────────
   app.post('/api/picker/start', (req, res) => {

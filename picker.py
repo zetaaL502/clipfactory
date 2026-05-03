@@ -8,11 +8,18 @@ import json
 import glob
 import asyncio
 import shutil
+from pathlib import Path
 from yt_dlp import YoutubeDL
 
 def write_status(path, data):
     with open(path, 'w') as f:
         json.dump(data, f)
+
+def thumbnail_public_path(job_dir, video_index, filename):
+    base = Path(__file__).resolve().parent / "thumbnails"
+    target = base / Path(job_dir).name / str(video_index)
+    target.mkdir(parents=True, exist_ok=True)
+    return str(target / filename)
 
 async def get_duration(video_path):
     ffprobe = shutil.which("ffprobe") or "ffprobe"
@@ -161,7 +168,11 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
     for i, thumb in enumerate(thumbs):
         ts = start_offset + i * THUMB_INTERVAL
         m, s = divmod(ts, 60)
-        thumb_data.append({"file": thumb, "timestamp": ts, "label": f"{m}:{s:02d}"})
+        public_path = thumbnail_public_path(job_dir, video_index, thumb)
+        source_path = os.path.join(thumb_dir, thumb)
+        if os.path.exists(source_path):
+            shutil.copy2(source_path, public_path)
+        thumb_data.append({"file": f"{Path(job_dir).name}/{video_index}/{thumb}", "timestamp": ts, "label": f"{m}:{s:02d}"})
 
     write_status(status_path, {
         "status": "done",
