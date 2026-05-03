@@ -52,7 +52,6 @@ function ClipCard({ clip, index, selected, onToggle }: {
       <div className="aspect-video bg-zinc-950 relative">
         <video ref={videoRef} src={`/clips/${clip}`} poster={`/api/thumbnail/${clip}`}
           className="w-full h-full object-cover" playsInline preload="metadata"
-          controls={playing}
           onPlay={() => setPlaying(true)}
           onEnded={() => setPlaying(false)}
         />
@@ -60,7 +59,7 @@ function ClipCard({ clip, index, selected, onToggle }: {
           <button
             onClick={e => { e.stopPropagation(); videoRef.current?.play(); }}
             className="absolute inset-0 w-full h-full flex items-center justify-center bg-transparent">
-            <Play className="w-10 h-10 text-white fill-white drop-shadow-lg" />
+            <Play className="w-12 h-12 text-white fill-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]" />
           </button>
         )}
       </div>
