@@ -71,8 +71,8 @@ function ClipCard({ clip, index, selected, onToggle }: {
         />
         {!playing && (
           <button onClick={handlePlay}
-            className="absolute bottom-2 left-2 z-20 flex items-center gap-1.5 bg-black/70 hover:bg-black/90 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-all">
-            <Play className="w-3 h-3 fill-white" /> Play
+            className="absolute inset-0 w-full h-full flex items-center justify-center z-20 bg-transparent">
+            <Play className="w-10 h-10 text-white fill-white drop-shadow-lg" />
           </button>
         )}
       </div>
