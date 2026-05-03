@@ -51,13 +51,18 @@ function ClipCard({ clip, index, selected, onToggle }: {
     >
       <div className="aspect-video bg-zinc-950 relative">
         <video ref={videoRef} src={`/clips/${clip}`} poster={`/api/thumbnail/${clip}`}
-          className="w-full h-full object-cover" playsInline preload="metadata"
+          className={`w-full h-full object-cover ${playing ? '' : 'pointer-events-none'}`}
+          playsInline preload="metadata"
           onPlay={() => setPlaying(true)}
           onEnded={() => setPlaying(false)}
         />
         {!playing && (
           <button
-            onClick={e => { e.stopPropagation(); videoRef.current?.play(); }}
+            onClick={e => {
+              e.stopPropagation();
+              setPlaying(true);
+              videoRef.current?.play().catch(() => setPlaying(false));
+            }}
             className="absolute inset-0 w-full h-full flex items-center justify-center bg-transparent">
             <Play className="w-12 h-12 text-white fill-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]" />
           </button>
