@@ -171,16 +171,14 @@ function ThumbCard({
         </div>
       </div>
 
-      {/* Bottom bar: timestamp + always-visible duration input */}
-      <div
-        className={`flex items-center gap-1.5 px-2 py-1.5 transition-colors ${isSelected ? 'bg-blue-900/50' : 'bg-zinc-900'}`}
-        onClick={e => e.stopPropagation()}
-      >
+      {/* Bottom bar: timestamp + duration input (input stops propagation, rest of bar selects) */}
+      <div className={`flex items-center gap-1.5 px-2 py-1.5 transition-colors ${isSelected ? 'bg-blue-900/50' : 'bg-zinc-900'}`}>
         <span className="text-[10px] font-mono text-zinc-500 shrink-0">{thumb.label}</span>
         <input
           type="text"
           value={durationVal}
           onChange={e => onDurationChange(e.target.value)}
+          onClick={e => e.stopPropagation()}
           list="duration-suggestions"
           placeholder={shortDur(clipDurationSecs)}
           className={`flex-1 min-w-0 text-[11px] font-mono text-center rounded px-1.5 py-0.5 outline-none border transition-colors
@@ -188,10 +186,7 @@ function ThumbCard({
               ? 'bg-blue-950 border-blue-500 text-blue-200 placeholder:text-blue-400/40'
               : 'bg-zinc-800 border-zinc-700 text-zinc-300 placeholder:text-zinc-600 focus:border-zinc-500'}`}
         />
-        <span
-          onClick={e => { e.stopPropagation(); onSelect(); }}
-          className={`shrink-0 text-[10px] font-bold w-5 text-center ${isSelected ? 'text-blue-400' : 'text-zinc-700'}`}
-        >
+        <span className={`shrink-0 text-[10px] font-bold w-5 text-center ${isSelected ? 'text-blue-400' : 'text-zinc-700'}`}>
           {isSelected ? '✓' : '·'}
         </span>
       </div>
