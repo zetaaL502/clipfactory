@@ -328,62 +328,54 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
 
   return (
     <div className="space-y-5">
-      <datalist id="duration-suggestions">
-        <option value="5" /><option value="8" /><option value="10" />
-        <option value="15" /><option value="20" /><option value="30" />
-        <option value="45" /><option value="1min" /><option value="1m30s" />
-        <option value="2min" /><option value="2m30s" /><option value="3min" />
-        <option value="4min" /><option value="5min" /><option value="7min" />
-        <option value="10min" /><option value="15min" /><option value="20min" />
-        <option value="30min" /><option value="45min" /><option value="1:00:00" />
-      </datalist>
-
       {/* ── Input Card ── */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
 
-        {/* URL input */}
-        <div className="space-y-1.5">
-          <label className="flex items-center gap-2 text-sm font-semibold text-white">
-            <Link className="w-3.5 h-3.5 text-zinc-500" /> Video URLs
-          </label>
-          <textarea
-            value={urls}
-            onChange={e => setUrls(e.target.value)}
-            placeholder={"https://archive.org/details/my-film @HistoryChannel\nhttps://archive.org/details/other-film @BBC\nhttps://vimeo.com/123456789"}
-            rows={3}
-            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 font-mono text-sm focus:ring-1 focus:ring-blue-500/60 outline-none resize-none text-zinc-200 placeholder:text-zinc-700"
-          />
-          <p className="text-xs text-zinc-600">One URL per line. Add <span className="font-mono text-zinc-500">@credit</span> after a URL to watermark its clips.</p>
-        </div>
-
-        {/* Fields row */}
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <Clock className="w-3 h-3" /> Duration <span className="text-zinc-700">(global default)</span>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Link className="w-3.5 h-3.5 text-zinc-500" /> Video URLs
             </label>
-            <input
-              type="text" list="duration-suggestions" value={duration}
-              onChange={e => setDuration(e.target.value)}
-              placeholder="30s, 2min, 1:30"
-              className="w-32 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500/60 text-zinc-200 placeholder:text-zinc-600"
+            <textarea
+              value={urls}
+              onChange={e => setUrls(e.target.value)}
+              placeholder={"https://archive.org/details/my-film @HistoryChannel\nhttps://archive.org/details/other-film @BBC\nhttps://vimeo.com/123456789"}
+              rows={3}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 font-mono text-sm focus:ring-1 focus:ring-blue-500/60 outline-none resize-none text-zinc-200 placeholder:text-zinc-700"
             />
+            <p className="text-xs text-zinc-600">One URL per line. Add <span className="font-mono text-zinc-500">@credit</span> after a URL to watermark its clips. This same box also accepts batch lines.</p>
           </div>
 
-          <div className="space-y-1 flex-1 min-w-36">
-            <label className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <AtSign className="w-3 h-3" /> Default Credit
-            </label>
-            <input type="text" value={credit} onChange={e => setCredit(e.target.value)}
-              placeholder="@yourchannel"
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500/60 text-zinc-200 placeholder:text-zinc-600" />
-          </div>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="flex items-center gap-1.5 text-xs text-zinc-500">
+                <Clock className="w-3 h-3" /> Duration <span className="text-zinc-700">(global default)</span>
+              </label>
+              <input
+                type="text"
+                value={duration}
+                onChange={e => setDuration(e.target.value)}
+                placeholder="4 = 4s, 1m, 2m30s, 1:30"
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500/60 text-zinc-200 placeholder:text-zinc-600"
+              />
+              <p className="text-[11px] text-zinc-600">Type what you mean. <span className="font-mono text-zinc-500">4</span> means 4s, <span className="font-mono text-zinc-500">1m</span> means 1 minute.</p>
+            </div>
 
-          <button onClick={handleBrowse} disabled={isLoading || !urls.trim()}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-5 py-2 rounded-xl font-semibold text-sm transition-all shadow-md shadow-blue-500/20 active:scale-95">
-            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
-            {isLoading ? 'Loading…' : 'Browse & Pick'}
-          </button>
+            <div className="space-y-1">
+              <label className="flex items-center gap-1.5 text-xs text-zinc-500">
+                <AtSign className="w-3 h-3" /> Default Credit
+              </label>
+              <input type="text" value={credit} onChange={e => setCredit(e.target.value)}
+                placeholder="@yourchannel"
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500/60 text-zinc-200 placeholder:text-zinc-600" />
+            </div>
+
+            <button onClick={handleBrowse} disabled={isLoading || !urls.trim()}
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-blue-500/20 active:scale-95">
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
+              {isLoading ? 'Loading…' : 'Browse & Pick'}
+            </button>
+          </div>
         </div>
 
         {pickerStatus && (
@@ -407,49 +399,52 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                 <div className="pt-4 space-y-4">
 
-                  {/* Mode reference */}
-                  <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-zinc-800 flex items-center gap-2">
-                      <span className="text-xs font-semibold text-zinc-400">Format:</span>
-                      <code className="text-xs font-mono text-zinc-300">URL , field , field , @credit</code>
+                  <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Batch Run</p>
+                        <p className="text-sm text-zinc-300">Paste one instruction per line.</p>
+                      </div>
+                      <code className="text-[11px] font-mono text-zinc-400">URL , field , field , @credit</code>
                     </div>
-                    <div className="divide-y divide-zinc-800/60">
-                      {[
-                        { mode: 'Single clip',  example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">2:30</span><span className="text-zinc-700"> , </span><span className="text-amber-400">@BBC</span></>, note: 'Cut 30s at 2:30' },
-                        { mode: 'Chunk video',  example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">2min</span><span className="text-zinc-700"> , </span><span className="text-amber-400">@CNN</span></>, note: 'Split whole video into 2min pieces' },
-                        { mode: 'Range chunk', example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">2:30-4:00</span></>, note: 'Chunk only 2:30–4:00' },
-                        { mode: 'Best N',       example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-purple-400">best:5</span></>, note: '5 evenly spaced clips' },
-                        { mode: 'Random N',     example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-purple-400">random:5</span></>, note: '5 random clips' },
-                        { mode: 'Chunk tail',   example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">3:30<span className="text-amber-300">+</span></span></>, note: 'From 3:30 to end of video' },
-                      ].map(row => (
-                        <div key={row.mode} className="grid grid-cols-[80px_1fr_auto] items-center gap-3 px-4 py-2.5">
-                          <span className="text-[10px] text-zinc-600 uppercase tracking-wider font-semibold">{row.mode}</span>
-                          <code className="text-xs font-mono">{row.example}</code>
-                          <span className="text-[10px] text-zinc-600 text-right hidden sm:block">{row.note}</span>
-                        </div>
-                      ))}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
+                      <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl p-3 space-y-1">
+                        <p className="text-emerald-300 font-semibold uppercase tracking-wide text-[10px]">Browse & Pick</p>
+                        <p className="text-zinc-300">Use the top URL box when you want to browse thumbnails and pick clips manually.</p>
+                      </div>
+                      <div className="bg-blue-500/8 border border-blue-500/20 rounded-xl p-3 space-y-1">
+                        <p className="text-blue-300 font-semibold uppercase tracking-wide text-[10px]">Batch Run</p>
+                        <p className="text-zinc-300">Use batch lines when you want the server to cut clips automatically from text.</p>
+                      </div>
+                      <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl p-3 space-y-1">
+                        <p className="text-amber-300 font-semibold uppercase tracking-wide text-[10px]">Rule</p>
+                        <p className="text-zinc-300">Comma <span className="font-mono text-zinc-400">,</span> is the only delimiter. <span className="font-mono text-amber-400">@credit</span> stays optional.</p>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Format quick ref */}
-                  <div className="grid grid-cols-3 gap-2 text-[11px]">
-                    <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 space-y-1">
-                      <p className="text-zinc-500 font-semibold uppercase tracking-wide text-[10px]">Duration</p>
-                      <p className="font-mono text-zinc-400"><span className="text-emerald-400">8s 15s 30s 45s</span></p>
-                      <p className="font-mono text-zinc-400"><span className="text-emerald-400">1min 2min 5min</span></p>
-                      <p className="font-mono text-zinc-400"><span className="text-emerald-400">1min30s</span> <span className="text-zinc-600">or</span> <span className="text-emerald-400">90</span></p>
+                  <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-zinc-800 flex items-center gap-2">
+                      <span className="text-xs font-semibold text-zinc-400">Examples:</span>
+                      <span className="text-xs text-zinc-500">what each mode does and when to use it</span>
                     </div>
-                    <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 space-y-1">
-                      <p className="text-zinc-500 font-semibold uppercase tracking-wide text-[10px]">Timestamp</p>
-                      <p className="font-mono text-zinc-400"><span className="text-blue-400">1:30</span> <span className="text-zinc-600">= 1m30s</span></p>
-                      <p className="font-mono text-zinc-400"><span className="text-blue-400">0:04:22</span> <span className="text-zinc-600">= HH:MM:SS</span></p>
-                      <p className="font-mono text-zinc-400"><span className="text-blue-400">2:30-4:00</span> <span className="text-zinc-600">range</span></p>
-                    </div>
-                    <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 space-y-1">
-                      <p className="text-zinc-500 font-semibold uppercase tracking-wide text-[10px]">Rules</p>
-                      <p className="text-zinc-500">Comma <span className="font-mono text-zinc-400">,</span> is the only delimiter.</p>
-                      <p className="text-zinc-500"><span className="font-mono text-amber-400">@credit</span> optional, any position.</p>
-                      <p className="text-zinc-500">Lines starting <span className="font-mono text-zinc-600">#</span> are comments.</p>
+                    <div className="divide-y divide-zinc-800/60">
+                      {[
+                        { mode: 'Single clip',  example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">2:30</span><span className="text-zinc-700"> , </span><span className="text-amber-400">@BBC</span></>, note: 'Use for one exact clip at one timestamp.' },
+                        { mode: 'Chunk video',  example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">2min</span><span className="text-zinc-700"> , </span><span className="text-amber-400">@CNN</span></>, note: 'Use when you want the whole video split evenly.' },
+                        { mode: 'Range chunk', example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">2:30-4:00</span></>, note: 'Use for a section only, not the whole video.' },
+                        { mode: 'Best N',       example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-purple-400">best:5</span></>, note: 'Use for 5 evenly spaced clips.' },
+                        { mode: 'Random N',     example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-purple-400">random:5</span></>, note: 'Use for random sampling.' },
+                        { mode: 'Chunk tail',   example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">3:30<span className="text-amber-300">+</span></span></>, note: 'Use when you want a section from a point to the end.' },
+                      ].map(row => (
+                        <div key={row.mode} className="grid grid-cols-[82px_1fr] gap-3 px-4 py-2.5">
+                          <span className="text-[10px] text-zinc-600 uppercase tracking-wider font-semibold">{row.mode}</span>
+                          <div className="space-y-1">
+                            <code className="text-xs font-mono">{row.example}</code>
+                            <p className="text-[11px] text-zinc-500">{row.note}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
