@@ -101,21 +101,24 @@ function ThumbCard({
   const hasCustomDur = durationVal.trim().length > 0;
   const [previewing, setPreviewing] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handlePlay = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setPreviewing(true);
-    const v = videoRef.current;
-    if (!v) return;
-    v.currentTime = thumb.timestamp;
-    v.play().catch(() => {});
-  }, [thumb.timestamp]);
-
-  const handleClose = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const stopPreview = useCallback(() => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
     videoRef.current?.pause();
     setPreviewing(false);
   }, []);
+
+  const handlePlay = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const v = videoRef.current;
+    if (!v) return;
+    setPreviewing(true);
+    v.currentTime = thumb.timestamp;
+    v.play().catch(() => setPreviewing(false));
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => stopPreview(), effectiveDurSecs * 1000);
+  }, [thumb.timestamp, effectiveDurSecs, stopPreview]);
 
   return (
     <div
@@ -126,73 +129,65 @@ function ThumbCard({
           : 'border-zinc-800 hover:border-zinc-600'}`}
     >
       {/* Top-left: order badge */}
-      {isSelected && !previewing && (
+      {isSelected && (
         <div className="absolute top-1.5 left-1.5 z-30 w-5 h-5 rounded-full bg-blue-600 border border-blue-400/60 flex items-center justify-center text-[9px] font-bold text-white">
           {selectionIndex + 1}
         </div>
       )}
 
-      {/* Top-right: live duration badge */}
-      {!previewing && (
-        <div className={`absolute top-1.5 right-1.5 z-30 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded shadow
-          ${hasCustomDur ? 'bg-blue-600 text-white' : 'bg-black/70 text-zinc-300'}`}>
-          {durLabel}
-        </div>
-      )}
+      {/* Top-right: duration badge */}
+      <div className={`absolute top-1.5 right-1.5 z-30 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded shadow
+        ${hasCustomDur ? 'bg-blue-600 text-white' : 'bg-black/70 text-zinc-300'}`}>
+        {durLabel}
+      </div>
 
       {/* Thumbnail / Video */}
       <div className="relative bg-black">
-        {previewing ? (
-          <>
-            <video
-              ref={videoRef}
-              src={`/picker-video/${jobId}/${videoIndex}`}
-              className="w-full aspect-video object-cover block bg-black"
-              playsInline
-              autoPlay
-              onEnded={() => setPreviewing(false)}
-            />
-            <button
-              onClick={handleClose}
-              className="absolute top-1.5 right-1.5 z-30 bg-black/70 hover:bg-black/90 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">
-              ✕
-            </button>
-          </>
-        ) : (
+        <video
+          ref={videoRef}
+          src={`/picker-video/${jobId}/${videoIndex}`}
+          className={`w-full aspect-video object-cover block bg-black ${previewing ? '' : 'hidden'}`}
+          playsInline
+        />
+        {!previewing && (
           <>
             <img src={`/thumbnails/${thumb.file}`}
               alt={`at ${thumb.label}`} className="w-full aspect-video object-cover block bg-black" loading="eager" />
             {isSelected && <div className="absolute inset-0 bg-blue-500/15 pointer-events-none" />}
-            <button
-              onClick={handlePlay}
-              className="absolute inset-0 w-full h-full flex items-center justify-center bg-transparent">
-              <Play className="w-8 h-8 text-white fill-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]" />
-            </button>
           </>
+        )}
+        {previewing ? (
+          <button onClick={e => { e.stopPropagation(); stopPreview(); }}
+            className="absolute top-1.5 left-1.5 z-30 bg-black/70 hover:bg-black/90 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">
+            ✕
+          </button>
+        ) : (
+          <button onClick={handlePlay}
+            className="absolute inset-0 w-full h-full flex items-center justify-center bg-transparent">
+            <Play className="w-8 h-8 text-white fill-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]" />
+          </button>
         )}
       </div>
 
-      {/* Bottom bar */}
-      {!previewing && (
-        <div className={`flex items-center gap-1.5 px-2 py-1.5 transition-colors ${isSelected ? 'bg-blue-950/60' : 'bg-zinc-900'}`}>
-          <span className="text-[10px] font-mono text-zinc-600 shrink-0">{thumb.label}</span>
-          <input
-            type="text"
-            value={durationVal}
-            onChange={e => onDurationChange(e.target.value)}
-            onClick={e => e.stopPropagation()}
-            list="duration-suggestions"
-            placeholder={shortDur(clipDurationSecs)}
-            className={`flex-1 min-w-0 text-[11px] font-mono text-center rounded px-1.5 py-0.5 outline-none border transition-colors
-              ${hasCustomDur
-                ? 'bg-blue-950 border-blue-500/60 text-blue-200 placeholder:text-blue-400/30'
-                : 'bg-zinc-800 border-zinc-700 text-zinc-300 placeholder:text-zinc-600 focus:border-zinc-500'}`}
-          />
-          <span className={`shrink-0 text-[10px] font-bold w-4 text-center ${isSelected ? 'text-blue-400' : 'text-zinc-700'}`}>
-            {isSelected ? '✓' : '·'}
-          </span>
-        </div>
-      )}
+      {/* Bottom bar — always visible */}
+      <div className={`flex items-center gap-1.5 px-2 py-1.5 transition-colors ${isSelected ? 'bg-blue-950/60' : 'bg-zinc-900'}`}>
+        <span className="text-[10px] font-mono text-zinc-600 shrink-0">{thumb.label}</span>
+        <input
+          type="text"
+          value={durationVal}
+          onChange={e => onDurationChange(e.target.value)}
+          onClick={e => e.stopPropagation()}
+          list="duration-suggestions"
+          placeholder={shortDur(clipDurationSecs)}
+          className={`flex-1 min-w-0 text-[11px] font-mono text-center rounded px-1.5 py-0.5 outline-none border transition-colors
+            ${hasCustomDur
+              ? 'bg-blue-950 border-blue-500/60 text-blue-200 placeholder:text-blue-400/30'
+              : 'bg-zinc-800 border-zinc-700 text-zinc-300 placeholder:text-zinc-600 focus:border-zinc-500'}`}
+        />
+        <span className={`shrink-0 text-[10px] font-bold w-4 text-center ${isSelected ? 'text-blue-400' : 'text-zinc-700'}`}>
+          {isSelected ? '✓' : '·'}
+        </span>
+      </div>
     </div>
   );
 }
