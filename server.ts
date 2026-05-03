@@ -346,31 +346,43 @@ asyncio.run(main())
 
       for (let i = 0; i < selections.length; i++) {
         const sel = selections[i];
-        const videoStatusPath = path.join(jobDir, String(sel.videoIndex), 'status.json');
-        if (!fs.existsSync(videoStatusPath)) continue;
-        let videoStatus: Record<string, unknown>;
-        try { videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8')); } catch { continue; }
-        const url = videoStatus.url as string | undefined;
-        if (!url) continue;
-
-        // Use per-clip duration if provided, fall back to global duration
         const clipDuration = (sel.duration && sel.duration > 0) ? sel.duration : (duration || 10);
-
-        // Number the clip by selection order (1-indexed, zero-padded)
         const seqNum = String(i + 1).padStart(padLen, '0');
         const clipName = `clip_${seqNum}_v${sel.videoIndex}_t${sel.timestamp}.mp4`;
         const clipPath = path.join(clipsDir, clipName);
 
-        await new Promise<void>(resolve => {
-          const effectiveCredit = (videoStatus.credit as string | null) || credit || null;
-          const args = ['picker_extract.py', url, String(sel.timestamp), String(clipDuration), clipPath];
-          if (effectiveCredit) args.push(effectiveCredit);
-          const proc = spawn('python3', args);
-          proc.stdout.on('data', d => console.log('[extract]', d.toString()));
-          proc.stderr.on('data', d => console.error('[extract]', d.toString()));
-          proc.on('close', () => resolve());
-          proc.on('error', () => resolve());
-        });
+        // Prefer cutting from the already-downloaded local video — no re-download needed
+        const localVideo = path.join(jobDir, String(sel.videoIndex), 'video.mp4');
+        if (fs.existsSync(localVideo)) {
+          await new Promise<void>(resolve => {
+            const ff = spawn('ffmpeg', [
+              '-y', '-ss', String(sel.timestamp), '-i', localVideo,
+              '-t', String(clipDuration), '-c:v', 'libx264', '-preset', 'fast',
+              '-crf', '23', '-an', '-movflags', '+faststart', clipPath
+            ]);
+            ff.stderr.on('data', (d: Buffer) => console.log('[extract-ffmpeg]', d.toString().split('\n').slice(-2).join(' ')));
+            ff.on('close', () => resolve());
+            ff.on('error', (e: Error) => { console.error('[extract-ffmpeg] error:', e); resolve(); });
+          });
+        } else {
+          // Fallback: re-download via yt-dlp (requires network)
+          const videoStatusPath = path.join(jobDir, String(sel.videoIndex), 'status.json');
+          if (!fs.existsSync(videoStatusPath)) continue;
+          let videoStatus: Record<string, unknown>;
+          try { videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8')); } catch { continue; }
+          const url = videoStatus.url as string | undefined;
+          if (!url) continue;
+          await new Promise<void>(resolve => {
+            const effectiveCredit = (videoStatus.credit as string | null) || credit || null;
+            const args = ['picker_extract.py', url, String(sel.timestamp), String(clipDuration), clipPath];
+            if (effectiveCredit) args.push(effectiveCredit);
+            const proc = spawn('python3', args);
+            proc.stdout.on('data', (d: Buffer) => console.log('[extract]', d.toString()));
+            proc.stderr.on('data', (d: Buffer) => console.error('[extract]', d.toString()));
+            proc.on('close', () => resolve());
+            proc.on('error', () => resolve());
+          });
+        }
 
         if (fs.existsSync(clipPath) && fs.statSync(clipPath).size > 100) extractedPaths.push({ filePath: clipPath, name: clipName });
       }
