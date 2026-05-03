@@ -477,6 +477,28 @@ asyncio.run(main())
     stream.pipe(res);
     stream.on('close', () => { try { fs.rmSync(path.dirname(zipPath), { recursive: true, force: true }); } catch {} });
   });
+  app.delete('/api/picker/cleanup-job/:jobId', (req, res) => {
+    const jobDir = path.join(PICKER_DIR, path.basename(req.params.jobId));
+    try {
+      if (fs.existsSync(jobDir)) fs.rmSync(jobDir, { recursive: true, force: true });
+      res.json({ status: 'ok' });
+    } catch (e) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
+
+  app.delete('/api/picker/cleanup-all', (req, res) => {
+    try {
+      if (fs.existsSync(PICKER_DIR)) {
+        for (const entry of fs.readdirSync(PICKER_DIR)) {
+          fs.rmSync(path.join(PICKER_DIR, entry), { recursive: true, force: true });
+        }
+      }
+      res.json({ status: 'ok' });
+    } catch (e) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
   // ── End Picker Routes ──────────────────────────────────────────────
 
   // Serve raw picker job video for preview

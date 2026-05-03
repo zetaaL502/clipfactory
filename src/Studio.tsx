@@ -4,7 +4,7 @@ import {
   Film, Link, Clock, AtSign, Download, Loader2, AlertCircle,
   CheckCircle2, X, ChevronRight, ChevronLeft,
   Trash2, CheckSquare, MinusSquare,
-  CornerRightDown, Play
+  CornerRightDown, Play, ServerCrash
 } from 'lucide-react';
 
 interface Thumbnail { file: string; timestamp: number; label: string; }
@@ -202,6 +202,8 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [deleteAfterZip, setDeleteAfterZip] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [extractProgress, setExtractProgress] = useState<{ current: number; total: number } | null>(null);
   const [extractElapsed, setExtractElapsed] = useState(0);
   const extractStartRef = useRef<number | null>(null);
@@ -346,9 +348,31 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
       setSelectionOrder([]);
       setThumbDurations({});
       onClipsUpdated?.();
+
+      // Delete downloaded videos from server if toggle is on
+      if (deleteAfterZip && jobId) {
+        await fetch(`/api/picker/cleanup-job/${jobId}`, { method: 'DELETE' });
+        setVideos([]);
+        setJobId(null);
+      }
     } catch (e: any) {
       setPickerStatus({ type: 'error', msg: e.message || 'Download failed.' });
     } finally { setIsExtracting(false); setExtractProgress(null); }
+  };
+
+  const clearAllDownloads = async () => {
+    if (isClearing) return;
+    setIsClearing(true);
+    try {
+      await fetch('/api/picker/cleanup-all', { method: 'DELETE' });
+      setVideos([]);
+      setJobId(null);
+      setSelectionOrder([]);
+      setThumbDurations({});
+      setPickerStatus(null);
+    } finally {
+      setIsClearing(false);
+    }
   };
 
   const segmentSelected = (video: VideoData) =>
@@ -445,6 +469,11 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                 <button onClick={deselectAll}
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all">
                   <MinusSquare className="w-3 h-3" /> None
+                </button>
+                <button onClick={clearAllDownloads} disabled={isClearing}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-900/40 hover:bg-red-900/70 border border-red-700/30 text-red-400 hover:text-red-300 disabled:opacity-50 transition-all">
+                  {isClearing ? <Loader2 className="w-3 h-3 animate-spin" /> : <ServerCrash className="w-3 h-3" />}
+                  {isClearing ? 'Clearing…' : 'Clear Server'}
                 </button>
               </div>
             </div>
@@ -593,10 +622,19 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap justify-end">
                 <button onClick={deselectAll} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all">
                   <X className="w-3.5 h-3.5" /> Clear
                 </button>
+                <label className="flex items-center gap-1.5 cursor-pointer select-none px-2 py-1.5 rounded-xl hover:bg-zinc-800 transition-all">
+                  <input
+                    type="checkbox"
+                    checked={deleteAfterZip}
+                    onChange={e => setDeleteAfterZip(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800 text-red-500 accent-red-500 cursor-pointer"
+                  />
+                  <span className="text-xs text-zinc-400">Delete from server after ZIP</span>
+                </label>
                 <div className="flex flex-col items-end gap-1">
                   <button onClick={downloadZip} disabled={isExtracting}
                     className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white px-5 py-2 rounded-xl font-semibold text-sm transition-all shadow-md shadow-emerald-500/20 active:scale-95">
