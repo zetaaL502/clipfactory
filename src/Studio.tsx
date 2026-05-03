@@ -444,11 +444,19 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
               </div>
             </div>
 
-            <button onClick={handleBrowse} disabled={isLoading || !urls.trim()}
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-blue-500/20 active:scale-95">
-              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
-              {isLoading ? 'Loading…' : 'Browse & Pick'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={handleBrowse} disabled={isLoading || !urls.trim()}
+                className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-blue-500/20 active:scale-95">
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
+                {isLoading ? 'Loading…' : 'Browse & Pick'}
+              </button>
+              <button onClick={clearAllDownloads} disabled={isClearing}
+                title="Delete all downloaded videos from the server"
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium bg-zinc-800 hover:bg-red-900/60 border border-zinc-700 hover:border-red-700/50 text-zinc-400 hover:text-red-300 disabled:opacity-50 transition-all">
+                {isClearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ServerCrash className="w-4 h-4" />}
+                {isClearing ? 'Clearing…' : 'Clear Server'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -469,11 +477,6 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                 <button onClick={deselectAll}
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all">
                   <MinusSquare className="w-3 h-3" /> None
-                </button>
-                <button onClick={clearAllDownloads} disabled={isClearing}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-900/40 hover:bg-red-900/70 border border-red-700/30 text-red-400 hover:text-red-300 disabled:opacity-50 transition-all">
-                  {isClearing ? <Loader2 className="w-3 h-3 animate-spin" /> : <ServerCrash className="w-3 h-3" />}
-                  {isClearing ? 'Clearing…' : 'Clear Server'}
                 </button>
               </div>
             </div>
