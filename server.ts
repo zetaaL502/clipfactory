@@ -377,14 +377,20 @@ asyncio.run(main())
 
           // Always use Python script for clip extraction (handles FFmpeg path correctly)
           let sourceArg = localVideo;
-          if (!fs.existsSync(localVideo)) {
-            const videoStatusPath = path.join(jobDir, String(sel.videoIndex), 'status.json');
-            if (!fs.existsSync(videoStatusPath)) continue;
-            let videoStatus: Record<string, unknown>;
-            try { videoStatus = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8')); } catch { continue; }
-            const url = videoStatus.url as string | undefined;
-            if (!url) continue;
-            sourceArg = url;
+          let perVideoCredit: string = '';
+          const videoStatusPath = path.join(jobDir, String(sel.videoIndex), 'status.json');
+          if (fs.existsSync(videoStatusPath)) {
+            try {
+              const videoStatus: Record<string, unknown> = JSON.parse(fs.readFileSync(videoStatusPath, 'utf-8'));
+              perVideoCredit = (videoStatus.credit as string) || '';
+              if (!fs.existsSync(localVideo)) {
+                const url = videoStatus.url as string | undefined;
+                if (!url) continue;
+                sourceArg = url;
+              }
+            } catch { if (!fs.existsSync(localVideo)) continue; }
+          } else if (!fs.existsSync(localVideo)) {
+            continue;
           }
 
           const logExtract = (prefix: string, data: Buffer) => {
@@ -395,7 +401,8 @@ asyncio.run(main())
           fs.appendFileSync(LOG_FILE, `[extract] Clip ${i + 1}/${selections.length}: t=${sel.timestamp}s dur=${clipDuration}s → ${clipName}\n`);
           await new Promise<void>(resolve => {
             const python = process.platform === 'win32' ? 'python' : 'python3';
-            const creditArg = (credit as string) || '';
+            // Per-URL @credit takes priority over the global credit field
+            const creditArg = perVideoCredit || (credit as string) || '';
             const fontSizeArg = String(creditSize || 11);
             const proc = spawn(python, ['picker_extract.py', sourceArg, String(sel.timestamp), String(clipDuration), clipPath, creditArg, fontSizeArg]);
             proc.stdout.on('data', (d: Buffer) => logExtract('extract', d));
