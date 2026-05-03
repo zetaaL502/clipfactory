@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Settings, Video, Download, Terminal, CheckCircle2,
-  AlertCircle, RefreshCcw, Info, Trash2, X, Clock, Scissors
+  AlertCircle, RefreshCcw, Info, Trash2, X, Clock, Scissors, Play
 } from 'lucide-react';
 import Studio from './Studio';
 
@@ -37,7 +37,16 @@ class ErrorBoundary extends (React.Component as any) {
 function ClipCard({ clip, index, selected, onToggle }: {
   key?: React.Key | null; clip: string; index: number; selected: boolean; onToggle: () => void;
 }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(false);
   const clipName = clip.replace(/\.mp4$/, '').replace(/_/g, ' ').trim();
+
+  const handlePlay = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const v = videoRef.current; if (!v) return;
+    v.play().catch(() => {});
+    setPlaying(true);
+  }, []);
 
   return (
     <motion.div
@@ -54,10 +63,18 @@ function ClipCard({ clip, index, selected, onToggle }: {
         </div>
       )}
       <div className="aspect-video bg-zinc-950 relative">
-        <video src={`/clips/${clip}`} poster={`/api/thumbnail/${clip}`}
+        <video ref={videoRef} src={`/clips/${clip}`} poster={`/api/thumbnail/${clip}`}
           className="w-full h-full object-cover" playsInline preload="none"
-          controls
+          controls={playing}
+          onEnded={() => setPlaying(false)}
+          onPause={() => { if (videoRef.current?.currentTime === 0) setPlaying(false); }}
         />
+        {!playing && (
+          <button onClick={handlePlay}
+            className="absolute bottom-2 left-2 z-20 flex items-center gap-1.5 bg-black/70 hover:bg-black/90 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-all">
+            <Play className="w-3 h-3 fill-white" /> Play
+          </button>
+        )}
       </div>
       <div className="px-3 py-2 flex items-center gap-2">
         <p className="text-xs text-white truncate font-mono flex-1" title={clipName}>{clipName}</p>
