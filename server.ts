@@ -372,7 +372,7 @@ asyncio.run(main())
           proc.on('error', () => resolve());
         });
 
-        if (fs.existsSync(clipPath)) extractedPaths.push({ filePath: clipPath, name: clipName });
+        if (fs.existsSync(clipPath) && fs.statSync(clipPath).size > 100) extractedPaths.push({ filePath: clipPath, name: clipName });
       }
 
       if (extractedPaths.length === 0) {

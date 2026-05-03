@@ -139,17 +139,19 @@ function ThumbCard({
       </div>
 
       {/* Thumbnail / video */}
-      <div className="relative bg-black" onClick={e => e.stopPropagation()}>
+      <div className="relative bg-black group/thumb"
+        onClick={e => { e.stopPropagation(); playing ? onStop() : onPlay(); }}>
         {playing ? (
           <video ref={videoRef} src={`/api/picker/video/${jobId}/${videoIndex}`}
             className="w-full aspect-video object-cover bg-black block" playsInline onEnded={onStop} />
         ) : (
-          <img src={`/thumbnails/${jobId}/${videoIndex}/${thumb.file}`}
+          <img src={`/thumbnails/${thumb.file}`}
             alt={`at ${thumb.label}`} className="w-full aspect-video object-cover block bg-black" loading="eager" />
         )}
         {isSelected && !playing && <div className="absolute inset-0 bg-blue-500/15 pointer-events-none" />}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="w-9 h-9 rounded-full bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className={`w-9 h-9 rounded-full bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-opacity
+            ${playing ? 'opacity-100' : 'opacity-0 group-hover/thumb:opacity-100'}`}>
             {playing
               ? <Square className="w-3.5 h-3.5 text-white fill-white" />
               : <Play className="w-3.5 h-3.5 text-white fill-white ml-0.5" />}
@@ -288,7 +290,11 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobId, selections: sels, duration: globalDurSecs, credit: credit || null })
       });
-      if (!res.ok) throw new Error('Extraction failed');
+      if (!res.ok) {
+        let msg = 'Extraction failed';
+        try { const d = await res.json(); msg = d.error || msg; } catch {}
+        throw new Error(msg);
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = 'clips.zip'; a.click();

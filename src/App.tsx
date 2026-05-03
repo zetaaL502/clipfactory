@@ -72,7 +72,7 @@ function ClipCard({ clip, index, selected, onToggle }: {
         />
         {!playing && (
           <div className="absolute inset-0 cursor-pointer flex items-center justify-center group/v" onClick={handlePlay}>
-            <div className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center opacity-0 group-hover/v:opacity-100 transition-opacity">
+            <div className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center opacity-60 group-hover/v:opacity-100 transition-opacity">
               <Play className="w-4 h-4 text-white fill-white ml-0.5" />
             </div>
           </div>
