@@ -343,7 +343,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
               rows={3}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 font-mono text-sm focus:ring-1 focus:ring-blue-500/60 outline-none resize-none text-zinc-200 placeholder:text-zinc-700"
             />
-            <p className="text-xs text-zinc-600">One URL per line. Add <span className="font-mono text-zinc-500">@credit</span> after a URL to watermark its clips. This same box also accepts batch lines.</p>
+            <p className="text-xs text-zinc-600">One box for everything. Paste URLs for Browse & Pick, or paste comma lines for Batch Run.</p>
           </div>
 
           <div className="space-y-3">
@@ -370,11 +370,18 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500/60 text-zinc-200 placeholder:text-zinc-600" />
             </div>
 
-            <button onClick={handleBrowse} disabled={isLoading || !urls.trim()}
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-blue-500/20 active:scale-95">
-              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
-              {isLoading ? 'Loading…' : 'Browse & Pick'}
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button onClick={handleBrowse} disabled={isLoading || !urls.trim()}
+                className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-blue-500/20 active:scale-95">
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
+                {isLoading ? 'Loading…' : 'Browse & Pick'}
+              </button>
+              <button onClick={handleBatchRun} disabled={isBatchRunning || !urls.trim()}
+                className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-emerald-500/20 active:scale-95">
+                {isBatchRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />}
+                {isBatchRunning ? 'Running…' : 'Batch Run'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -390,7 +397,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
           <button onClick={() => setShowBatch(b => !b)}
             className="flex items-center gap-2 text-xs font-medium text-zinc-500 hover:text-zinc-300 transition-colors">
             <Zap className="w-3.5 h-3.5 text-amber-500" />
-            Batch Run — save clips directly to server
+            Format help
             <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showBatch ? 'rotate-180' : ''}`} />
           </button>
 
@@ -403,7 +410,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div>
                         <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Batch Run</p>
-                        <p className="text-sm text-zinc-300">Paste one instruction per line.</p>
+                        <p className="text-sm text-zinc-300">Use the same box above, just with comma-separated lines.</p>
                       </div>
                       <code className="text-[11px] font-mono text-zinc-400">URL , field , field , @credit</code>
                     </div>
@@ -430,12 +437,12 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                     </div>
                     <div className="divide-y divide-zinc-800/60">
                       {[
-                        { mode: 'Single clip',  example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">2:30</span><span className="text-zinc-700"> , </span><span className="text-amber-400">@BBC</span></>, note: 'Use for one exact clip at one timestamp.' },
-                        { mode: 'Chunk video',  example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">2min</span><span className="text-zinc-700"> , </span><span className="text-amber-400">@CNN</span></>, note: 'Use when you want the whole video split evenly.' },
-                        { mode: 'Range chunk', example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">2:30-4:00</span></>, note: 'Use for a section only, not the whole video.' },
-                        { mode: 'Best N',       example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-purple-400">best:5</span></>, note: 'Use for 5 evenly spaced clips.' },
-                        { mode: 'Random N',     example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-purple-400">random:5</span></>, note: 'Use for random sampling.' },
-                        { mode: 'Chunk tail',   example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">3:30<span className="text-amber-300">+</span></span></>, note: 'Use when you want a section from a point to the end.' },
+                        { mode: 'Single clip',  example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">2:30</span><span className="text-zinc-700"> , </span><span className="text-amber-400">@BBC</span></>, note: 'One exact clip at one timestamp.' },
+                        { mode: 'Chunk video',  example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">2min</span><span className="text-zinc-700"> , </span><span className="text-amber-400">@CNN</span></>, note: 'Whole video split evenly.' },
+                        { mode: 'Range chunk', example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">2:30-4:00</span></>, note: 'Only a section, not the whole video.' },
+                        { mode: 'Best N',       example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-purple-400">best:5</span></>, note: '5 evenly spaced clips.' },
+                        { mode: 'Random N',     example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-purple-400">random:5</span></>, note: '5 random clips.' },
+                        { mode: 'Chunk tail',   example: <><span className="text-zinc-500">URL</span><span className="text-zinc-700"> , </span><span className="text-emerald-400">30s</span><span className="text-zinc-700"> , </span><span className="text-blue-400">3:30<span className="text-amber-300">+</span></span></>, note: 'From a point to the end.' },
                       ].map(row => (
                         <div key={row.mode} className="grid grid-cols-[82px_1fr] gap-3 px-4 py-2.5">
                           <span className="text-[10px] text-zinc-600 uppercase tracking-wider font-semibold">{row.mode}</span>
