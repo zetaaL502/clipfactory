@@ -464,25 +464,46 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
 
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <BookOpen className="w-3.5 h-3.5" /> Line Format
+                      <BookOpen className="w-3.5 h-3.5" /> Line Format — comma delimited
                     </p>
-                    <div className="bg-black rounded-xl p-4 font-mono text-xs space-y-2 border border-zinc-800">
-                      <p className="text-zinc-500">URL <span className="text-zinc-700">|</span> duration <span className="text-zinc-700">|</span> start_time <span className="text-zinc-700">|</span> @credit</p>
-                      <div className="border-t border-zinc-900 pt-2 space-y-1.5">
-                        <p className="text-zinc-600"># ── ONE CLIP at a specific moment ──</p>
-                        <p>https://archive.org/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">30sec</span> <span className="text-zinc-600">|</span> <span className="text-blue-400">2:30</span> <span className="text-zinc-600">|</span> <span className="text-amber-400">@BBC</span></p>
+                    <div className="bg-black rounded-xl p-4 font-mono text-xs space-y-3 border border-zinc-800">
 
-                        <p className="text-zinc-600 pt-1"># ── CHUNK from a timestamp to the end (add + after time) ──</p>
-                        <p>https://youtube.com/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">30sec</span> <span className="text-zinc-600">|</span> <span className="text-blue-400">3:30+</span></p>
-
-                        <p className="text-zinc-600 pt-1"># ── CHUNK entire video from the start ──</p>
-                        <p>https://archive.org/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">2min</span> <span className="text-zinc-600">|</span> <span className="text-amber-400">@CNN</span></p>
-
-                        <p className="text-zinc-600 pt-1"># ── Multiple clips, same video ──</p>
-                        <p>https://archive.org/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">15sec</span> <span className="text-zinc-600">|</span> <span className="text-blue-400">0:45</span></p>
-                        <p>https://archive.org/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">15sec</span> <span className="text-zinc-600">|</span> <span className="text-blue-400">1:20</span></p>
-                        <p>https://archive.org/... <span className="text-zinc-600">|</span> <span className="text-emerald-400">15sec</span> <span className="text-zinc-600">|</span> <span className="text-blue-400">4:05</span></p>
+                      {/* Format 1 — single clip */}
+                      <div className="space-y-0.5">
+                        <p className="text-zinc-600"># ── ONE CLIP at a specific timestamp ──</p>
+                        <p>https://archive.org/... <span className="text-zinc-600">,</span> <span className="text-emerald-400">30s</span> <span className="text-zinc-600">,</span> <span className="text-blue-400">2:30</span> <span className="text-zinc-600">,</span> <span className="text-amber-400">@BBC</span></p>
+                        <p className="text-zinc-600 text-[10px]">FFmpeg cuts 30s starting at 2:30. Burns @BBC.</p>
                       </div>
+
+                      {/* Format 2 — chunk whole video */}
+                      <div className="space-y-0.5 border-t border-zinc-900 pt-2">
+                        <p className="text-zinc-600"># ── CHUNK entire video into equal pieces ──</p>
+                        <p>https://archive.org/... <span className="text-zinc-600">,</span> <span className="text-emerald-400">2min</span> <span className="text-zinc-600">,</span> <span className="text-amber-400">@CNN</span></p>
+                        <p className="text-zinc-600 text-[10px]">Splits whole video into 2min chunks from start to end.</p>
+                      </div>
+
+                      {/* Format 3 — range chunk */}
+                      <div className="space-y-0.5 border-t border-zinc-900 pt-2">
+                        <p className="text-zinc-600"># ── CHUNK only between two timestamps ──</p>
+                        <p>https://archive.org/... <span className="text-zinc-600">,</span> <span className="text-emerald-400">30s</span> <span className="text-zinc-600">,</span> <span className="text-blue-400">2:30-4:00</span> <span className="text-zinc-600">,</span> <span className="text-amber-400">@BBC</span></p>
+                        <p className="text-zinc-600 text-[10px]">Cuts 30s chunks only between 2:30 and 4:00.</p>
+                      </div>
+
+                      {/* Format 4 — best:N */}
+                      <div className="space-y-0.5 border-t border-zinc-900 pt-2">
+                        <p className="text-zinc-600"># ── BEST N evenly spaced clips ──</p>
+                        <p>https://archive.org/... <span className="text-zinc-600">,</span> <span className="text-purple-400">best:5</span> <span className="text-zinc-600">,</span> <span className="text-amber-400">@credit</span></p>
+                        <p>https://archive.org/... <span className="text-zinc-600">,</span> <span className="text-emerald-400">30s</span> <span className="text-zinc-600">,</span> <span className="text-purple-400">best:5</span></p>
+                        <p className="text-zinc-600 text-[10px]">Divides video into 5 intervals, cuts one clip per interval. Add duration to fix clip length.</p>
+                      </div>
+
+                      {/* Format 5 — random:N */}
+                      <div className="space-y-0.5 border-t border-zinc-900 pt-2">
+                        <p className="text-zinc-600"># ── RANDOM N clips at random timestamps ──</p>
+                        <p>https://archive.org/... <span className="text-zinc-600">,</span> <span className="text-emerald-400">30s</span> <span className="text-zinc-600">,</span> <span className="text-purple-400">random:5</span> <span className="text-zinc-600">,</span> <span className="text-amber-400">@credit</span></p>
+                        <p className="text-zinc-600 text-[10px]">Picks 5 random timestamps and cuts 30s from each.</p>
+                      </div>
+
                     </div>
                   </div>
 
@@ -490,27 +511,27 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                     <div className="bg-zinc-800/50 border border-zinc-800 rounded-xl p-3 space-y-1.5">
                       <p className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">Duration</p>
                       <div className="text-[11px] font-mono text-zinc-400 space-y-0.5">
-                        <p><span className="text-emerald-400">8sec</span> <span className="text-zinc-600">·</span> <span className="text-emerald-400">15sec</span> <span className="text-zinc-600">·</span> <span className="text-emerald-400">30sec</span></p>
+                        <p><span className="text-emerald-400">8s</span> <span className="text-zinc-600">·</span> <span className="text-emerald-400">15s</span> <span className="text-zinc-600">·</span> <span className="text-emerald-400">30s</span> <span className="text-zinc-600">·</span> <span className="text-emerald-400">45s</span></p>
                         <p><span className="text-emerald-400">1min</span> <span className="text-zinc-600">·</span> <span className="text-emerald-400">2min</span> <span className="text-zinc-600">·</span> <span className="text-emerald-400">5min</span></p>
-                        <p><span className="text-emerald-400">1min30sec</span> <span className="text-zinc-600">· plain</span> <span className="text-emerald-400">90</span></p>
+                        <p><span className="text-emerald-400">1min30s</span> <span className="text-zinc-600">· plain</span> <span className="text-emerald-400">90</span></p>
                       </div>
                     </div>
                     <div className="bg-zinc-800/50 border border-zinc-800 rounded-xl p-3 space-y-1.5">
-                      <p className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">Start Time</p>
+                      <p className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">Timestamp / Range</p>
                       <div className="text-[11px] font-mono text-zinc-400 space-y-0.5">
                         <p><span className="text-blue-400">1:30</span> <span className="text-zinc-600">= MM:SS</span></p>
                         <p><span className="text-blue-400">0:04:22</span> <span className="text-zinc-600">= HH:MM:SS</span></p>
                         <p><span className="text-blue-400">90</span> <span className="text-zinc-600">= plain seconds</span></p>
-                        <p><span className="text-blue-400">3:30<span className="text-amber-300">+</span></span> <span className="text-zinc-600">= chunk from 3:30 to end</span></p>
-                        <p className="text-zinc-600">omit = chunk whole video</p>
+                        <p><span className="text-blue-400">2:30-4:00</span> <span className="text-zinc-600">= chunk range</span></p>
+                        <p><span className="text-blue-400">3:30<span className="text-amber-300">+</span></span> <span className="text-zinc-600">= chunk to video end</span></p>
                       </div>
                     </div>
                     <div className="bg-zinc-800/50 border border-zinc-800 rounded-xl p-3 space-y-1.5">
-                      <p className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">@Credit</p>
-                      <div className="text-[11px] text-zinc-400 space-y-0.5">
-                        <p>Burned into bottom-left corner of every clip.</p>
-                        <p>Works in <span className="text-zinc-300">any field position</span> — just add it anywhere in the line.</p>
-                        <p className="font-mono"><span className="text-amber-400">@BBC</span> <span className="text-zinc-600">·</span> <span className="text-amber-400">@CNN</span> <span className="text-zinc-600">·</span> <span className="text-amber-400">@mychannel</span></p>
+                      <p className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">Special Modes</p>
+                      <div className="text-[11px] font-mono text-zinc-400 space-y-0.5">
+                        <p><span className="text-purple-400">best:N</span> <span className="text-zinc-600">evenly spaced</span></p>
+                        <p><span className="text-purple-400">random:N</span> <span className="text-zinc-600">random picks</span></p>
+                        <p className="text-zinc-500 font-sans pt-0.5">@credit optional, anywhere after URL</p>
                       </div>
                     </div>
                   </div>
@@ -524,7 +545,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                   </div>
 
                   <textarea value={feed} onChange={e => setFeed(e.target.value)}
-                    placeholder={"https://archive.org/... | 30sec | 2:30 | @BBC\nhttps://archive.org/... | 1min | 5:00+\nhttps://archive.org/... | 15sec | 0:45"}
+                    placeholder={"https://archive.org/... , 30s , 2:30 , @BBC\nhttps://archive.org/... , 2min , @CNN\nhttps://archive.org/... , 30s , 2:30-4:00\nhttps://archive.org/... , best:5 , @credit\nhttps://archive.org/... , 30s , random:5"}
                     rows={7}
                     className="w-full bg-zinc-950 border border-zinc-700 rounded-xl p-4 font-mono text-sm focus:ring-2 focus:ring-blue-500/50 outline-none resize-none text-zinc-200 placeholder:text-zinc-600" />
 

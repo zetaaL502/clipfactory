@@ -2,6 +2,7 @@ import os
 import asyncio
 import json
 import logging
+import random
 import re
 import shutil
 from datetime import datetime
@@ -36,7 +37,7 @@ def sanitize_filename(name):
     return re.sub(r'[^a-zA-Z0-9]', '_', name).lower()[:50]
 
 def parse_duration(s):
-    """Parse duration: '8sec', '2min', '1min30sec', '90', '8s', '2m' → seconds."""
+    """Parse duration string: '8s', '8sec', '2min', '2m', '1min30sec', '90' → seconds."""
     s = s.strip().lower()
     try:
         return int(float(s))
@@ -51,10 +52,10 @@ def parse_duration(s):
         total += int(sec_match.group(1))
     if total > 0:
         return total
-    raise ValueError(f"Cannot parse duration: '{s}' — use e.g. 8, 8sec, 2min, 1min30sec")
+    raise ValueError(f"Cannot parse duration: '{s}' — use e.g. 8, 8s, 2min, 1min30s")
 
 def hms_to_seconds(hms):
-    """Convert HH:MM:SS or MM:SS or plain seconds to total seconds."""
+    """Convert HH:MM:SS or MM:SS or plain seconds string to total seconds."""
     hms = hms.strip()
     if ':' not in hms:
         return int(float(hms))
@@ -122,7 +123,6 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None, 
 
         FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
-        # Build drawtext filter string (empty string = no watermark)
         drawtext_filter = ""
         if credit:
             escaped = escape_drawtext(credit)
@@ -141,10 +141,7 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None, 
                 "-t", str(duration),
             ]
             if drawtext_filter:
-                cmd += [
-                    "-filter_complex", f"[0:v]{drawtext_filter}[vout]",
-                    "-map", "[vout]",
-                ]
+                cmd += ["-filter_complex", f"[0:v]{drawtext_filter}[vout]", "-map", "[vout]"]
             else:
                 cmd += ["-map", "0:v:0"]
             if no_audio:
@@ -170,7 +167,6 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None, 
         _, ff_err = await ffproc.communicate()
         ff_err_str = ff_err.decode()
 
-        # Always log FFmpeg return code and any stderr output for debugging
         if ffproc.returncode != 0:
             await log_msg("ERROR", f"FFmpeg exited with code {ffproc.returncode}")
         if ff_err_str.strip():
@@ -192,10 +188,12 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None, 
         return False
 
 
+# ── Processing modes ─────────────────────────────────────────────────────────
+
 async def process_single(line_num, url, duration, start_time, credit=None):
     """Cut one clip at a specific start_time."""
-    credit_info = f" | credit: {credit}" if credit else ""
-    await log_msg("INFO", f"=== [Line {line_num}] {url} | {duration}s from {start_time}s{credit_info} ===")
+    credit_info = f", credit: {credit}" if credit else ""
+    await log_msg("INFO", f"=== [Line {line_num}] SINGLE: {url} , {duration}s from {start_time}s{credit_info} ===")
     out = os.path.join(CLIPS_DIR, f"clip_s{line_num}.mp4")
     ok = await download_4k_clip(url, start_time, duration, out, credit=credit)
     if ok:
@@ -205,28 +203,33 @@ async def process_single(line_num, url, duration, start_time, credit=None):
     await log_msg("INFO", f"=== [Line {line_num}] Finished ===")
 
 
-async def process_chunked(line_num, url, duration, credit=None, start_offset=0):
-    """Cut video into equal-duration chunks from start_offset to the end."""
-    credit_info = f" | credit: {credit}" if credit else ""
-    offset_info = f" from {start_offset}s" if start_offset else ""
-    await log_msg("INFO", f"=== [Line {line_num}] CHUNK MODE: {url} | {duration}s chunks{offset_info}{credit_info} ===")
+async def process_chunked(line_num, url, duration, credit=None, start_offset=0, end_offset=None):
+    """Cut video into equal-duration chunks from start_offset to end_offset (or video end)."""
+    credit_info = f", credit: {credit}" if credit else ""
+    range_info = f" {start_offset}s–{end_offset}s" if end_offset is not None else (f" from {start_offset}s" if start_offset else "")
+    await log_msg("INFO", f"=== [Line {line_num}] CHUNK MODE: {url} , {duration}s chunks{range_info}{credit_info} ===")
 
     total = await get_video_duration_url(url)
     if not total:
         await log_msg("ERROR", f"[Line {line_num}] Could not get video duration — skipping chunk mode.")
         return
 
-    usable = total - start_offset
+    effective_end = end_offset if end_offset is not None else total
+    if effective_end > total:
+        await log_msg("WARNING", f"[Line {line_num}] End offset {effective_end}s exceeds video length {total:.0f}s — clamping.")
+        effective_end = total
+
+    usable = effective_end - start_offset
     if usable <= 0:
-        await log_msg("ERROR", f"[Line {line_num}] Start offset ({start_offset}s) is beyond video length ({total:.0f}s) — skipping.")
+        await log_msg("ERROR", f"[Line {line_num}] Start offset ({start_offset}s) is at or beyond end ({effective_end:.0f}s) — skipping.")
         return
 
     num_chunks = int(usable // duration)
     if num_chunks == 0:
-        await log_msg("WARNING", f"[Line {line_num}] Remaining video ({usable:.0f}s) shorter than chunk size ({duration}s) — cutting one clip.")
+        await log_msg("WARNING", f"[Line {line_num}] Range ({usable:.0f}s) shorter than chunk size ({duration}s) — cutting one clip.")
         num_chunks = 1
 
-    await log_msg("INFO", f"[Line {line_num}] Video is {total:.0f}s, starting at {start_offset}s → {num_chunks} chunk(s) of {duration}s")
+    await log_msg("INFO", f"[Line {line_num}] Cutting {num_chunks} chunk(s) of {duration}s")
 
     succeeded = 0
     for i in range(num_chunks):
@@ -242,57 +245,189 @@ async def process_chunked(line_num, url, duration, credit=None, start_offset=0):
     await log_msg("INFO", f"=== [Line {line_num}] Done: {succeeded}/{num_chunks} chunks saved ===")
 
 
+async def process_best(line_num, url, n, clip_duration=None, credit=None):
+    """Extract N evenly spaced clips. Clip duration defaults to total/N if not specified."""
+    credit_info = f", credit: {credit}" if credit else ""
+    await log_msg("INFO", f"=== [Line {line_num}] BEST:{n}: {url}{credit_info} ===")
+
+    total = await get_video_duration_url(url)
+    if not total:
+        await log_msg("ERROR", f"[Line {line_num}] Could not get video duration for best:{n} — skipping.")
+        return
+
+    interval = total / n
+    dur = clip_duration if clip_duration and clip_duration > 0 else max(1, int(interval))
+    timestamps = [i * interval for i in range(n)]
+
+    await log_msg("INFO", f"[Line {line_num}] Video {total:.0f}s, interval {interval:.1f}s, clip_duration {dur}s, {n} clips")
+
+    succeeded = 0
+    for i, ts in enumerate(timestamps):
+        out = os.path.join(CLIPS_DIR, f"clip_s{line_num}_best{i+1:03d}.mp4")
+        await log_msg("INFO", f"[Line {line_num}] Best clip {i+1}/{n} at {ts:.0f}s → {out}")
+        ok = await download_4k_clip(url, ts, dur, out, credit=credit)
+        if ok:
+            succeeded += 1
+        else:
+            await log_msg("WARNING", f"[Line {line_num}] Best clip {i+1} failed — skipping.")
+
+    await log_msg("INFO", f"=== [Line {line_num}] Done: {succeeded}/{n} best clips saved ===")
+
+
+async def process_random(line_num, url, clip_duration, n, credit=None):
+    """Extract N clips at random timestamps spread across the video."""
+    credit_info = f", credit: {credit}" if credit else ""
+    await log_msg("INFO", f"=== [Line {line_num}] RANDOM:{n}: {url} , {clip_duration}s each{credit_info} ===")
+
+    total = await get_video_duration_url(url)
+    if not total:
+        await log_msg("ERROR", f"[Line {line_num}] Could not get video duration for random:{n} — skipping.")
+        return
+
+    max_start = max(0.0, total - clip_duration)
+    timestamps = sorted(random.uniform(0, max_start) for _ in range(n))
+
+    await log_msg("INFO", f"[Line {line_num}] Video {total:.0f}s, picking {n} random timestamps")
+
+    succeeded = 0
+    for i, ts in enumerate(timestamps):
+        out = os.path.join(CLIPS_DIR, f"clip_s{line_num}_rand{i+1:03d}.mp4")
+        await log_msg("INFO", f"[Line {line_num}] Random clip {i+1}/{n} at {ts:.0f}s → {out}")
+        ok = await download_4k_clip(url, ts, clip_duration, out, credit=credit)
+        if ok:
+            succeeded += 1
+        else:
+            await log_msg("WARNING", f"[Line {line_num}] Random clip {i+1} failed — skipping.")
+
+    await log_msg("INFO", f"=== [Line {line_num}] Done: {succeeded}/{n} random clips saved ===")
+
+
+# ── Line parser ───────────────────────────────────────────────────────────────
+
+def _is_time_range(s):
+    """Return (start_secs, end_secs) if s matches 'start-end' time range, else None."""
+    m = re.match(r'^([\d:]+)-([\d:]+)$', s.strip())
+    if not m:
+        return None
+    try:
+        a = hms_to_seconds(m.group(1))
+        b = hms_to_seconds(m.group(2))
+        return (a, b)
+    except (ValueError, IndexError):
+        return None
+
+
+async def parse_and_dispatch(line_num, line):
+    """
+    Parse one comma-delimited line and dispatch to the correct processing mode.
+
+    Supported formats (comma-delimited, @credit always optional and anywhere after URL):
+
+      URL , 30s , 2:30 , @credit     → single clip at 2:30
+      URL , 2min , @credit            → chunk entire video into 2min pieces
+      URL , 30s , 2:30-4:00 , @credit → chunk only between 2:30 and 4:00
+      URL , best:5 , @credit          → 5 evenly-spaced clips (duration = total/5)
+      URL , 30s , best:5 , @credit    → 5 evenly-spaced clips of 30s each
+      URL , 30s , random:5 , @credit  → 5 random 30s clips
+      URL , 30s , 2:30+               → chunk from 2:30 to video end (legacy + syntax)
+    """
+    parts = [p.strip() for p in line.split(',')]
+    if len(parts) < 2:
+        await log_msg("WARNING", f"Skipping line {line_num}: '{line}' — need at least: URL , duration")
+        return
+
+    url = parts[0]
+    if not url:
+        await log_msg("WARNING", f"Skipping line {line_num}: empty URL")
+        return
+
+    # Separate @credit fields from value fields (everything after URL)
+    credit = None
+    value_fields = []
+    for p in parts[1:]:
+        if p.startswith('@'):
+            credit = p
+        elif p:
+            value_fields.append(p)
+
+    if not value_fields:
+        await log_msg("WARNING", f"Skipping line {line_num}: no duration/mode field found")
+        return
+
+    field1 = value_fields[0]
+    field2 = value_fields[1] if len(value_fields) > 1 else ''
+
+    # ── Mode: best:N (no explicit duration) ──────────────────────────────────
+    best_match = re.match(r'^best:(\d+)$', field1, re.IGNORECASE)
+    if best_match:
+        n = int(best_match.group(1))
+        await process_best(line_num, url, n, clip_duration=None, credit=credit)
+        return
+
+    # ── Parse field1 as clip duration ────────────────────────────────────────
+    try:
+        duration = parse_duration(field1)
+    except ValueError as e:
+        await log_msg("ERROR", f"Line {line_num}: {e} — skipping.")
+        return
+
+    # No field2 → chunk entire video from start
+    if not field2:
+        await process_chunked(line_num, url, duration, credit=credit)
+        return
+
+    # ── Mode: best:N with explicit duration ──────────────────────────────────
+    best_match2 = re.match(r'^best:(\d+)$', field2, re.IGNORECASE)
+    if best_match2:
+        n = int(best_match2.group(1))
+        await process_best(line_num, url, n, clip_duration=duration, credit=credit)
+        return
+
+    # ── Mode: random:N ───────────────────────────────────────────────────────
+    random_match = re.match(r'^random:(\d+)$', field2, re.IGNORECASE)
+    if random_match:
+        n = int(random_match.group(1))
+        await process_random(line_num, url, duration, n, credit=credit)
+        return
+
+    # ── Mode: time range  2:30-4:00 ──────────────────────────────────────────
+    time_range = _is_time_range(field2)
+    if time_range is not None:
+        start_s, end_s = time_range
+        await process_chunked(line_num, url, duration, credit=credit,
+                               start_offset=start_s, end_offset=end_s)
+        return
+
+    # ── Mode: single timestamp  2:30  or chunk-from-offset  2:30+ ────────────
+    raw_ts = field2
+    chunk_from_offset = False
+    if raw_ts.endswith('+'):
+        chunk_from_offset = True
+        raw_ts = raw_ts[:-1]
+
+    try:
+        start_time = hms_to_seconds(raw_ts)
+    except (ValueError, IndexError):
+        await log_msg("WARNING", f"Line {line_num}: Could not parse '{field2}' as timestamp or mode — skipping.")
+        return
+
+    if chunk_from_offset:
+        await process_chunked(line_num, url, duration, credit=credit, start_offset=start_time)
+    else:
+        await process_single(line_num, url, duration, start_time, credit=credit)
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
 async def run_factory(feed_text):
     setup_logger()
     await log_msg("INFO", f"--- Pipeline Started at {datetime.now()} ---")
 
-    lines = [l.strip() for l in feed_text.strip().split('\n') if l.strip() and not l.strip().startswith('#')]
+    lines = [l.strip() for l in feed_text.strip().split('\n')
+             if l.strip() and not l.strip().startswith('#')]
 
     for line_num, line in enumerate(lines, start=1):
-        parts = [p.strip() for p in line.split('|')]
-        if len(parts) < 2:
-            await log_msg("WARNING", f"Skipping line {line_num}: '{line}' — need at least URL | duration")
-            continue
-
-        url = parts[0]
-        dur_str = parts[1]
-
-        try:
-            duration = parse_duration(dur_str)
-        except ValueError as e:
-            await log_msg("ERROR", f"Line {line_num}: {e} — skipping.")
-            continue
-
-        # Smart field detection for remaining parts
-        # Field 3 can be: @credit  OR  timestamp  OR  timestamp+  (chunk from that point)
-        # Field 4 can be: @credit (when field 3 was a timestamp)
-        credit = None
-        start_time = None
-        chunk_from_offset = False   # True when timestamp ends with '+'
-
-        remaining = [p for p in parts[2:] if p]
-        for field in remaining:
-            if field.startswith('@'):
-                credit = field
-            else:
-                raw = field
-                if raw.endswith('+'):
-                    chunk_from_offset = True
-                    raw = raw[:-1]
-                try:
-                    start_time = hms_to_seconds(raw)
-                except (ValueError, IndexError):
-                    await log_msg("WARNING", f"Line {line_num}: Could not parse '{field}' as timestamp — ignoring.")
-
-        if start_time is not None and not chunk_from_offset:
-            # Single clip at exact timestamp
-            await process_single(line_num, url, duration, start_time, credit=credit)
-        elif start_time is not None and chunk_from_offset:
-            # Chunk from timestamp to end of video
-            await process_chunked(line_num, url, duration, credit=credit, start_offset=start_time)
-        else:
-            # No timestamp → chunk entire video from beginning
-            await process_chunked(line_num, url, duration, credit=credit)
+        await parse_and_dispatch(line_num, line)
 
     await log_msg("INFO", "--- Batch processing complete ---")
     await log_msg("INFO", f"--- Pipeline Finished at {datetime.now()} ---")
