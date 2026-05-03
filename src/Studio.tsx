@@ -105,11 +105,10 @@ function ThumbCard({
   playing: boolean; onPlay: () => void; onStop: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const durInputRef = useRef<HTMLInputElement>(null);
-  const [editingDur, setEditingDur] = useState(false);
   const isSelected = selectionIndex !== null;
   const effectiveDurSecs = durationVal.trim() ? parseDurationSecs(durationVal) : clipDurationSecs;
   const durLabel = shortDur(effectiveDurSecs);
+  const hasCustomDur = durationVal.trim().length > 0;
 
   useEffect(() => {
     const v = videoRef.current;
@@ -125,10 +124,6 @@ function ThumbCard({
     if (!playing) { const v = videoRef.current; if (v) { v.pause(); v.currentTime = thumb.timestamp; } }
   }, [playing, thumb.timestamp]);
 
-  useEffect(() => {
-    if (editingDur) durInputRef.current?.focus();
-  }, [editingDur]);
-
   return (
     <div
       onClick={onSelect}
@@ -139,46 +134,22 @@ function ThumbCard({
             ? 'border-blue-500 ring-2 ring-blue-500/40 shadow-lg shadow-blue-500/20'
             : 'border-zinc-700 hover:border-zinc-500'}`}
     >
-      {/* Selection order badge — top-left */}
+      {/* Top-left: selection order badge */}
       {isSelected && (
         <div className="absolute top-1.5 left-1.5 z-30 w-5 h-5 rounded-full bg-blue-600 border border-blue-400 flex items-center justify-center text-[9px] font-bold text-white shadow-md">
           {selectionIndex + 1}
         </div>
       )}
 
-      {/* Duration badge — bottom-right of image, always visible, tap to edit */}
-      <div
-        className="absolute bottom-8 right-1.5 z-30"
-        onClick={e => e.stopPropagation()}
-      >
-        {editingDur ? (
-          <input
-            ref={durInputRef}
-            type="text"
-            value={durationVal}
-            onChange={e => onDurationChange(e.target.value)}
-            onBlur={() => setEditingDur(false)}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setEditingDur(false); }}
-            list="duration-suggestions"
-            placeholder={shortDur(clipDurationSecs)}
-            className="w-20 text-center text-[11px] font-mono bg-zinc-900 border-2 border-blue-500 rounded-lg px-2 py-1 outline-none text-blue-200 shadow-xl"
-          />
-        ) : (
-          <button
-            onClick={() => setEditingDur(true)}
-            title="Tap to set this clip's duration"
-            className={`flex items-center gap-1 text-[11px] font-mono font-semibold px-2 py-1 rounded-lg border-2 transition-all hover:scale-105 active:scale-95 shadow-lg backdrop-blur-sm
-              ${durationVal.trim()
-                ? 'bg-blue-600/80 border-blue-400 text-white'
-                : 'bg-black/80 border-zinc-500 text-zinc-200 hover:border-blue-400 hover:text-blue-200'}`}
-          >
-            <Clock className="w-3 h-3 shrink-0" />
-            {durLabel}
-          </button>
-        )}
+      {/* Top-right: live duration badge — updates as you type below */}
+      <div className={`absolute top-1.5 right-1.5 z-30 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md shadow
+        ${hasCustomDur
+          ? 'bg-blue-600 text-white'
+          : 'bg-black/70 text-zinc-300'}`}>
+        {durLabel}
       </div>
 
-      {/* Thumbnail / video — click here for play only */}
+      {/* Thumbnail / video — click for play preview, not selection */}
       <div className="relative" onClick={e => e.stopPropagation()}>
         {playing ? (
           <video ref={videoRef} src={`/api/picker/video/${jobId}/${videoIndex}`}
@@ -187,17 +158,10 @@ function ThumbCard({
           <img src={`/api/picker/thumb/${jobId}/${videoIndex}/${thumb.file}`}
             alt={`at ${thumb.label}`} className="w-full aspect-video object-cover" loading="lazy" />
         )}
-
-        {/* Selected tint overlay */}
         {isSelected && !playing && (
           <div className="absolute inset-0 bg-blue-500/15 pointer-events-none" />
         )}
-
-        {/* Play / stop overlay */}
-        <div
-          className="absolute inset-0 flex items-center justify-center"
-          onClick={playing ? onStop : onPlay}
-        >
+        <div className="absolute inset-0 flex items-center justify-center" onClick={playing ? onStop : onPlay}>
           <div className={`w-9 h-9 rounded-full bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-opacity
             ${playing ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}>
             {playing
@@ -207,13 +171,29 @@ function ThumbCard({
         </div>
       </div>
 
-      {/* Bottom bar — timestamp only */}
-      <div className={`flex items-center justify-between px-2.5 py-1.5 transition-colors
-        ${isSelected ? 'bg-blue-900/50' : 'bg-zinc-900'}`}>
-        <span className="text-[10px] font-mono text-zinc-400">{thumb.label}</span>
-        {isSelected
-          ? <span className="text-[10px] font-semibold text-blue-400">✓</span>
-          : <span className="text-[10px] text-zinc-700">tap</span>}
+      {/* Bottom bar: timestamp + always-visible duration input */}
+      <div
+        className={`flex items-center gap-1.5 px-2 py-1.5 transition-colors ${isSelected ? 'bg-blue-900/50' : 'bg-zinc-900'}`}
+        onClick={e => e.stopPropagation()}
+      >
+        <span className="text-[10px] font-mono text-zinc-500 shrink-0">{thumb.label}</span>
+        <input
+          type="text"
+          value={durationVal}
+          onChange={e => onDurationChange(e.target.value)}
+          list="duration-suggestions"
+          placeholder={shortDur(clipDurationSecs)}
+          className={`flex-1 min-w-0 text-[11px] font-mono text-center rounded px-1.5 py-0.5 outline-none border transition-colors
+            ${hasCustomDur
+              ? 'bg-blue-950 border-blue-500 text-blue-200 placeholder:text-blue-400/40'
+              : 'bg-zinc-800 border-zinc-700 text-zinc-300 placeholder:text-zinc-600 focus:border-zinc-500'}`}
+        />
+        <span
+          onClick={e => { e.stopPropagation(); onSelect(); }}
+          className={`shrink-0 text-[10px] font-bold w-5 text-center ${isSelected ? 'text-blue-400' : 'text-zinc-700'}`}
+        >
+          {isSelected ? '✓' : '·'}
+        </span>
       </div>
     </div>
   );
