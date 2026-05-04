@@ -364,13 +364,19 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
     if (isClearing) return;
     setIsClearing(true);
     try {
-      await fetch('/api/picker/cleanup-all', { method: 'DELETE' });
+      const res = await fetch('/api/picker/cleanup-all', { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error('[clear-server] server returned error:', body);
+      }
       setVideos([]);
       setJobId(null);
       setSelectionOrder([]);
       setThumbDurations({});
       setPickerStatus(null);
       onClipsUpdated?.();
+    } catch (e) {
+      console.error('[clear-server] fetch failed:', e);
     } finally {
       setIsClearing(false);
     }

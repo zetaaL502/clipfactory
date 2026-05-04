@@ -488,22 +488,26 @@ asyncio.run(main())
   });
 
   app.delete('/api/picker/cleanup-all', (req, res) => {
-    try {
-      const clearDir = (dir: string) => {
-        if (fs.existsSync(dir)) {
-          for (const entry of fs.readdirSync(dir)) {
-            fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
-          }
+    const errors: string[] = [];
+    const clearDir = (dir: string) => {
+      if (!fs.existsSync(dir)) return;
+      for (const entry of fs.readdirSync(dir)) {
+        const full = path.join(dir, entry);
+        try {
+          fs.rmSync(full, { recursive: true, force: true });
+        } catch (e) {
+          errors.push(`${full}: ${e}`);
         }
-      };
-      clearDir(PICKER_DIR);
-      clearDir(CLIPS_DIR);
-      clearDir(THUMBNAILS_DIR);
-      fs.writeFileSync(LOG_FILE, '');
-      res.json({ status: 'ok' });
-    } catch (e) {
-      res.status(500).json({ error: String(e) });
+      }
+    };
+    clearDir(PICKER_DIR);
+    clearDir(CLIPS_DIR);
+    clearDir(THUMBNAILS_DIR);
+    try { fs.writeFileSync(LOG_FILE, ''); } catch {}
+    if (errors.length > 0) {
+      console.warn('[cleanup-all] some files could not be deleted:', errors);
     }
+    res.json({ status: 'ok', errors });
   });
   // ── End Picker Routes ──────────────────────────────────────────────
 
