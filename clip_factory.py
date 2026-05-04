@@ -78,6 +78,19 @@ def escape_drawtext(text):
     text = text.replace(':', '\\:')
     return text
 
+
+def escape_font_for_drawtext(path):
+    """Escape a font file path for ffmpeg drawtext= fontfile= on any OS.
+
+    ffmpeg's filter parser uses ':' as the option separator, so Windows drive
+    colons must be escaped and backslashes converted to forward slashes:
+      C:\\Windows\\Fonts\\arialbd.ttf  →  C\\:/Windows/Fonts/arialbd.ttf
+    """
+    path = path.replace("\\", "/")
+    if len(path) >= 2 and path[1] == ":":
+        path = path[0] + "\\:" + path[2:]
+    return path
+
 def _cookies_args():
     """Return ['--cookies', 'cookies.txt'] if the file exists, else []."""
     p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
@@ -189,8 +202,9 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None, 
         if credit:
             escaped = escape_drawtext(credit)
             if font_path:
+                escaped_font = escape_font_for_drawtext(font_path)
                 drawtext_filter = (
-                    f"drawtext=fontfile='{font_path}':text='{escaped}'"
+                    f"drawtext=fontfile='{escaped_font}':text='{escaped}'"
                     f":fontsize={font_size}:fontcolor=white:borderw=1:bordercolor=black"
                     f":x=8:y=h-th-8"
                 )

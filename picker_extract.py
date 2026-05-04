@@ -48,6 +48,19 @@ def find_font():
     return None
 
 
+def escape_font_for_drawtext(path):
+    """Escape a font path for ffmpeg drawtext= fontfile= on any OS.
+
+    ffmpeg's filter parser uses ':' as the option separator and '\' as an
+    escape character, so Windows paths need special treatment:
+      C:\\Windows\\Fonts\\arialbd.ttf  →  C\\:/Windows/Fonts/arialbd.ttf
+    """
+    path = path.replace("\\", "/")
+    if len(path) >= 2 and path[1] == ":":
+        path = path[0] + "\\:" + path[2:]
+    return path
+
+
 def cut_local_video(local_path, timestamp, duration, output_path, credit=None, font_size=11):
     """Cut a clip from a local video file using ffmpeg. Returns True on success."""
     ffmpeg = find_ffmpeg()
@@ -58,7 +71,8 @@ def cut_local_video(local_path, timestamp, duration, output_path, credit=None, f
         font = find_font()
         escaped = credit.replace("'", "\\'").replace(":", "\\:")
         if font:
-            vf_filter = f"drawtext=fontfile='{font}':text='{escaped}':fontsize={font_size}:fontcolor=white:borderw=1:bordercolor=black:x=8:y=h-th-8"
+            escaped_font = escape_font_for_drawtext(font)
+            vf_filter = f"drawtext=fontfile='{escaped_font}':text='{escaped}':fontsize={font_size}:fontcolor=white:borderw=1:bordercolor=black:x=8:y=h-th-8"
         else:
             vf_filter = f"drawtext=text='{escaped}':fontsize={font_size}:fontcolor=white:borderw=1:bordercolor=black:x=8:y=h-th-8"
 

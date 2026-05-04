@@ -1,0 +1,22 @@
+[picker] [download]  92.8% of   22.88MiB at    1.93MiB/s ETA 00:00
+[picker] [download] 100.0% of   22.88MiB at    1.71MiB/s ETA 00:00
+[picker] [download] 100% of   22.88MiB in 00:00:11 at 1.93MiB/s
+[extract] [picker_extract] ffmpeg error: erchain 'drawtext=fontfile='C:\Windows\Fonts\arialbd.ttf':text='@bbcdev':fontsize=11:fontcolor=white:borderw=1:bordercolor=black:x=8:y=h-th-8' around: 
+Error opening output file picker_jobs\8f8caf16-2dce-4a16-806b-0915d8e22097\clips\clip_1_v0_t30.mp4.
+Error opening output files: Invalid argument
+[extract] [picker_extract] ffmpeg error: erchain 'drawtext=fontfile='C:\Windows\Fonts\arialbd.ttf':text='@bbcdev':fontsize=11:fontcolor=white:borderw=1:bordercolor=black:x=8:y=h-th-8' around: 
+Error opening output file picker_jobs\8f8caf16-2dce-4a16-806b-0915d8e22097\clips\clip_2_v0_t60.mp4.
+Error opening output files: Invalid argument
+[extract] 
+[extract] [picker_extract] ffmpeg error: erchain 'drawtext=fontfile='C:\Windows\Fonts\arialbd.ttf':text='@bbcdev':fontsize=11:fontcolor=white:borderw=1:bordercolor=black:x=8:y=h-th-8' around: 
+Error opening output file picker_jobs\8f8caf16-2dce-4a16-806b-0915d8e22097\clips\clip_3_v0_t90.mp4.
+Error opening output files: Invalid argument
+[extract] [picker_extract] ffmpeg error: erchain 'drawtext=fontfile='C:\Windows\Fonts\arialbd.ttf':text='@bbcdev':fontsize=11:fontcolor=white:borderw=1:bordercolor=black:x=8:y=h-th-8' around: 
+Error opening output file picker_jobs\8f8caf16-2dce-4a16-806b-0915d8e22097\clips\clip_1_v0_t30.mp4.
+Error opening output files: Invalid argument
+[extract] [picker_extract] ffmpeg error: erchain 'drawtext=fontfile='C:\Windows\Fonts\arialbd.ttf':text='@bbcdev':fontsize=11:fontcolor=white:borderw=1:bordercolor=black:x=8:y=h-th-8' around: 
+Error opening output file picker_jobs\8f8caf16-2dce-4a16-806b-0915d8e22097\clips\clip_2_v0_t60.mp4.
+Error opening output files: Invalid argument
+[extract] [picker_extract] ffmpeg error: erchain 'drawtext=fontfile='C:\Windows\Fonts\arialbd.ttf':text='@bbcdev':fontsize=11:fontcolor=white:borderw=1:bordercolor=black:x=8:y=h-th-8' around: 
+Error opening output file picker_jobs\8f8caf16-2dce-4a16-806b-0915d8e22097\clips\clip_3_v0_t90.mp4.
+Error opening output files: Invalid argument
