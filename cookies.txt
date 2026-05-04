@@ -1,0 +1,4 @@
+# Netscape HTTP Cookie File
+# Add your YouTube cookies below this line.
+# Export from your browser using a cookie export extension (e.g. "Get cookies.txt LOCALLY").
+# Format: domain  TRUE/FALSE  path  TRUE/FALSE  expiry  name  value

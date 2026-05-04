@@ -7,4 +7,4 @@ coverage/
 .env*
 !.env.example
 config.json
-cookies.txt
+# cookies.txt is intentionally tracked so it persists across Codespaces sessions
