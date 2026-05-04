@@ -90,42 +90,62 @@ def _yt_dlp_js_args():
 
 
 async def get_video_duration_url(url):
-    """Get total video duration in seconds via yt-dlp --dump-json."""
+    """Get total video duration in seconds via yt-dlp --dump-json, with client fallbacks."""
     ytdlp_path = shutil.which("yt-dlp") or "yt-dlp"
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            ytdlp_path,
-            "--dump-json", "--no-playlist", "--no-warnings",
-            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "--extractor-args", "youtube:player_client=android,web",
-            *_yt_dlp_js_args(),
-            *_cookies_args(),
-            url,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await proc.communicate()
-        data = json.loads(stdout.decode().strip())
-        return float(data.get('duration', 0))
-    except Exception as e:
-        await log_msg("WARNING", f"Could not get video duration: {e}")
-        return 0.0
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    cookies = _cookies_args()
+    # ios/mweb skip n-challenge but reject cookies → try without cookies first
+    attempts = [
+        (["--extractor-args", "youtube:player_client=ios"],  []),
+        (["--extractor-args", "youtube:player_client=mweb"], []),
+        ([],                                                  []),      # yt-dlp default, no cookies
+        ([],                                                  cookies), # with cookies as last resort
+    ]
+    for extra_args, cookie_args in attempts:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                ytdlp_path,
+                "--dump-json", "--no-playlist", "--no-warnings",
+                "--user-agent", ua,
+                *extra_args, *_yt_dlp_js_args(), *cookie_args,
+                url,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await proc.communicate()
+            if proc.returncode == 0:
+                data = json.loads(stdout.decode().strip())
+                return float(data.get('duration', 0))
+        except Exception:
+            pass
+    await log_msg("WARNING", f"Could not get video duration for {url}")
+    return 0.0
 
 
 async def _get_video_stream_urls(url):
-    """Try stream URL extraction with yt-dlp format fallbacks."""
+    """Try stream URL extraction with client + format fallbacks."""
     ytdlp_path = shutil.which("yt-dlp") or "yt-dlp"
-    format_candidates = ["bestvideo+bestaudio/best", "best"]
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    cookies = _cookies_args()
+    # ios/mweb skip n-challenge but reject cookies → try without cookies first.
+    # Format 18 (360p muxed mp4) is universally available — no challenge, no tokens.
+    attempts = [
+        (["--extractor-args", "youtube:player_client=ios"],  [],     "bestvideo+bestaudio/best"),
+        (["--extractor-args", "youtube:player_client=ios"],  [],     "best"),
+        (["--extractor-args", "youtube:player_client=mweb"], [],     "bestvideo+bestaudio/best"),
+        (["--extractor-args", "youtube:player_client=mweb"], [],     "best"),
+        ([],                                                  [],     "18"),
+        ([],                                                  cookies,"bestvideo+bestaudio/best"),
+        ([],                                                  cookies,"best"),
+    ]
     last_err = ""
-    for fmt in format_candidates:
+    for extra_args, cookie_args, fmt in attempts:
         proc = await asyncio.create_subprocess_exec(
             ytdlp_path,
             "-f", fmt,
             "--get-url", "--no-warnings", "--no-playlist",
-            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "--extractor-args", "youtube:player_client=android,web",
-            *_yt_dlp_js_args(),
-            *_cookies_args(),
+            "--user-agent", ua,
+            *extra_args, *_yt_dlp_js_args(), *cookie_args,
             url,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -136,7 +156,7 @@ async def _get_video_stream_urls(url):
             urls = [u.strip() for u in stdout.decode().strip().splitlines() if u.strip()]
             if urls:
                 return urls
-        await log_msg("WARNING", f"yt-dlp format {fmt} failed for {url}: {last_err.splitlines()[-1] if last_err else 'no stderr'}")
+        await log_msg("WARNING", f"yt-dlp fmt={fmt} client={extra_args} failed: {last_err.splitlines()[-1] if last_err else 'no stderr'}")
 
     raise Exception(f"yt-dlp failed to get URL for {url}. last stderr: {last_err}")
 
