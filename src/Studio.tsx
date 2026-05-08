@@ -86,6 +86,7 @@ function ThumbCard({
   selectionIndex, onSelect,
   durationVal, onDurationChange,
   jobId, videoIndex,
+  playingKey, onTogglePlay,
 }: {
   key?: React.Key | null;
   thumb: Thumbnail; clipDurationSecs: number;
@@ -94,35 +95,45 @@ function ThumbCard({
   durationVal: string;
   onDurationChange: (v: string) => void;
   jobId: string; videoIndex: number;
+  playingKey: string | null;
+  onTogglePlay: (key: string | null) => void;
 }) {
   const isSelected = selectionIndex !== null;
   const effectiveDurSecs = durationVal.trim() ? parseDurationSecs(durationVal) : clipDurationSecs;
   const durLabel = shortDur(effectiveDurSecs);
   const hasCustomDur = durationVal.trim().length > 0;
-  const [previewing, setPreviewing] = useState(false);
+  const cardKey = `${videoIndex}:${thumb.timestamp}`;
+  const previewing = playingKey === cardKey;
   const videoRef = useRef<HTMLVideoElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const stopPreview = useCallback(() => {
-    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
-    videoRef.current?.pause();
-    setPreviewing(false);
-  }, []);
 
   const handlePlay = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     const v = videoRef.current;
     if (!v) return;
-    setPreviewing(true);
-    v.currentTime = thumb.timestamp;
-    v.play().catch(() => setPreviewing(false));
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => stopPreview(), effectiveDurSecs * 1000);
-  }, [thumb.timestamp, effectiveDurSecs, stopPreview]);
+
+    if (previewing) {
+      onTogglePlay(null);
+    } else {
+      onTogglePlay(cardKey);
+      v.currentTime = thumb.timestamp;
+      v.play().catch(() => onTogglePlay(null));
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => onTogglePlay(null), effectiveDurSecs * 1000);
+    }
+  }, [previewing, cardKey, thumb.timestamp, effectiveDurSecs, onTogglePlay]);
+
+  // Auto-stop when another card takes over
+  useEffect(() => {
+    if (!previewing) {
+      videoRef.current?.pause();
+      if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    }
+  }, [previewing]);
 
   return (
     <div
-      onClick={previewing ? undefined : onSelect}
+      onClick={previewing ? () => onTogglePlay(null) : onSelect}
       className={`relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all select-none flex flex-col
         ${isSelected
           ? 'border-blue-500 ring-2 ring-blue-500/30'
@@ -157,7 +168,7 @@ function ThumbCard({
           </>
         )}
         {previewing ? (
-          <button onClick={e => { e.stopPropagation(); stopPreview(); }}
+          <button onClick={e => { e.stopPropagation(); onTogglePlay(null); }}
             className="absolute top-1.5 left-1.5 z-30 bg-black/70 hover:bg-black/90 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">
             ✕
           </button>
@@ -222,6 +233,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
     }
     return () => { if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current); };
   }, [isExtracting]);
+  const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [thumbStart, setThumbStart] = useState<Record<number, number>>({});
   const [thumbSeekVal, setThumbSeekVal] = useState<Record<number, string>>({});
   const [thumbSeekErr, setThumbSeekErr] = useState<Record<number, boolean>>({});
@@ -256,7 +268,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
     setPickerStatus(null); setIsLoading(true);
     setSelectionOrder([]); setThumbDurations({});
     setThumbStart({}); setThumbSeekVal({}); setThumbSeekErr({});
-    setVideos([]); setJobId(null);
+    setVideos([]); setJobId(null); setPlayingKey(null);
     try {
       const res = await fetch('/api/picker/start', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -578,6 +590,8 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                               onDurationChange={v => setThumbDurations(p => ({ ...p, [k]: v }))}
                               jobId={jobId!}
                               videoIndex={video.index}
+                              playingKey={playingKey}
+                              onTogglePlay={setPlayingKey}
                             />
                           );
                         })}

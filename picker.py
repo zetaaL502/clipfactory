@@ -75,10 +75,9 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
     has_cookies = os.path.exists(cookies_file)
     # (extractor_args or None, use_cookies, format)
     attempts = [
-        ({'youtube': {'player_client': ['ios']}},  False,       'bestvideo+bestaudio/best'),
-        ({'youtube': {'player_client': ['mweb']}}, False,       'bestvideo+bestaudio/best'),
+        ({'youtube': {'player_client': ['ios']}},  False,       'best'),
+        ({'youtube': {'player_client': ['mweb']}}, False,       'best'),
         (None,                                      False,       '18'),
-        (None,                                      has_cookies, 'bestvideo+bestaudio/best'),
         (None,                                      has_cookies, 'best'),
     ]
     last_err = None

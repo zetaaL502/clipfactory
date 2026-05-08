@@ -231,7 +231,7 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None, 
                 cmd += ["-an"]
             else:
                 cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "128k"]
-            cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "18",
                     "-movflags", "+faststart", output_path]
         else:
             video_url = urls[0]
@@ -242,7 +242,7 @@ async def download_4k_clip(url, start_time, duration, output_path, credit=None, 
                 cmd += ["-an"]
             else:
                 cmd += ["-c:a", "aac", "-b:a", "128k"]
-            cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "18",
                     "-movflags", "+faststart", output_path]
 
         ffproc = await asyncio.create_subprocess_exec(

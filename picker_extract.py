@@ -81,8 +81,7 @@ def cut_local_video(local_path, timestamp, duration, output_path, credit=None, f
         "-ss", str(int(timestamp)),
         "-i", local_path,
         "-t", str(int(duration)),
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-        "-an",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
         "-movflags", "+faststart",
     ]
     if vf_filter:
@@ -123,7 +122,7 @@ async def main():
 
     # Otherwise treat as URL and download+cut
     from clip_factory import download_4k_clip
-    success = await download_4k_clip(source, timestamp, duration, output_path, credit=credit, no_audio=True, font_size=font_size)
+    success = await download_4k_clip(source, timestamp, duration, output_path, credit=credit, no_audio=False, font_size=font_size)
     sys.exit(0 if success else 1)
 
 
