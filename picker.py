@@ -68,7 +68,12 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
     ffmpeg = FFMPEG_PATH or "ffmpeg"
 
     video_path = os.path.join(video_dir, 'video.mp4')
-    if not (os.path.exists(video_path) and os.path.getsize(video_path) > 1000):
+
+    # If video.mp4 already exists (uploaded by user), skip download entirely.
+    if os.path.exists(video_path) and os.path.getsize(video_path) > 1000:
+        write_status(status_path, {"status": "extracting", "url": url, "thumbnails": []})
+    else:
+        # ── Download via yt-dlp ──────────────────────────────────────────────
         write_status(status_path, {"status": "downloading", "url": url, "thumbnails": []})
 
         # ios/mweb bypass n-challenge but don't accept cookies → try without cookies first.
@@ -114,33 +119,32 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
             return
 
         # Find the downloaded file (yt-dlp uses %(ext)s so the extension varies)
-    if not os.path.exists(video_path) or os.path.getsize(video_path) < 1000:
-        # Look for non-mp4 files yt-dlp may have created
-        candidates = sorted(
-            glob.glob(os.path.join(video_dir, 'video.*')),
-            key=os.path.getsize, reverse=True
-        )
-        found = next(
-            (c for c in candidates if os.path.getsize(c) > 1000 and not c.endswith('.mp4')),
-            None
-        )
-        if found:
-            print(f"[picker] Converting {found} → video.mp4", flush=True)
-            ok = await ensure_mp4(ffmpeg, found, video_path)
-            if ok:
-                os.remove(found)
+        if not os.path.exists(video_path) or os.path.getsize(video_path) < 1000:
+            # Look for non-mp4 files yt-dlp may have created
+            candidates = sorted(
+                glob.glob(os.path.join(video_dir, 'video.*')),
+                key=os.path.getsize, reverse=True
+            )
+            found = next(
+                (c for c in candidates if os.path.getsize(c) > 1000 and not c.endswith('.mp4')),
+                None
+            )
+            if found:
+                print(f"[picker] Converting {found} → video.mp4", flush=True)
+                ok = await ensure_mp4(ffmpeg, found, video_path)
+                if ok:
+                    os.remove(found)
+                else:
+                    os.rename(found, video_path)
             else:
-                # Use whatever we got as-is and rename
-                os.rename(found, video_path)
-        else:
-            # Check for a partial mp4 from a previous attempt
-            if not (os.path.exists(video_path) and os.path.getsize(video_path) > 1000):
-                write_status(status_path, {
-                    "status": "error", "url": url,
-                    "error": "Download failed or file is empty.", "thumbnails": []
-                })
-                return
+                if not (os.path.exists(video_path) and os.path.getsize(video_path) > 1000):
+                    write_status(status_path, {
+                        "status": "error", "url": url,
+                        "error": "Download failed or file is empty.", "thumbnails": []
+                    })
+                    return
 
+    # ── Final validation ─────────────────────────────────────────────────────
     if not os.path.exists(video_path) or os.path.getsize(video_path) < 1000:
         write_status(status_path, {
             "status": "error", "url": url,
@@ -148,12 +152,15 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
         })
         return
 
+    # ── Thumbnail extraction ─────────────────────────────────────────────────
     duration = await get_duration(video_path)
     write_status(status_path, {"status": "extracting", "url": url, "duration": duration, "credit": credit, "thumbnails": []})
 
-    THUMB_INTERVAL = max(clip_duration, 10)
+    # Use clip_duration as the thumbnail interval so each thumb represents one clip.
+    # Floor at 1s to avoid divide-by-zero.
+    THUMB_INTERVAL = max(clip_duration, 1)
 
-    # Start at THUMB_INTERVAL so first thumb isn't a black frame; if video is very short, start at 0
+    # For short videos (< 2 clip-lengths), start at 0 so we capture all content.
     start_offset = THUMB_INTERVAL if (duration and duration > THUMB_INTERVAL * 2) else 0
 
     cmd = [
