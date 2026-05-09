@@ -1,0 +1,124 @@
+Full Plan — Upload Toggle for Clip Factory
+What stays 100% the same
+- YouTube URL input mode (no changes at all)
+- Everything else: thumbnail grid, preview playback, selection, per-thumb custom duration, credit watermark + size slider, pagination, jump-to, Download ZIP, delete-after-ZIP toggle, Clear Server, Settings, Logs, Saved Clips
+What to implement
+---
+1. picker.py — Skip download when file exists
+In process_video(), move video_path check before the download block:
+video_path = os.path.join(video_dir, 'video.mp4')
+if not (os.path.exists(video_path) and os.path.getsize(video_path) > 1000):
+    write_status(status_path, {"status": "downloading", ...})
+    # ... entire existing yt-dlp download block (indented under this if)
+    # ... fallback, conversion, etc.
+# After the if block: same existing validation and thumbnail extraction
+if not os.path.exists(video_path) or os.path.getsize(video_path) < 1000:
+    write_status(status_path, {"status": "error", ...})
+    return
+duration = await get_duration(video_path)
+# ... rest unchanged
+This way, if a user-uploaded file already exists at video.mp4, the download step is completely skipped and it goes straight to thumbnails.
+---
+2. server.ts — Add upload endpoint
+Already installed: multer + @types/multer (npm packages added).
+Add near the top:
+import multer from 'multer';
+Add multer config inside startServer():
+const videoUpload = multer({
+  dest: path.join(os.tmpdir(), 'clipfactory-uploads'),
+  limits: { fileSize: 10 * 1024 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) return cb(null, true);
+    cb(new Error(`Invalid file type: ${ext}`));
+  }
+});
+Add before the existing app.post('/api/picker/start', ...):
+app.post('/api/picker/upload', videoUpload.single('video'), (req, res) => {
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: 'No file uploaded' });
+  const jobId = randomUUID();
+  const jobDir = path.join(PICKER_DIR, jobId);
+  fs.mkdirSync(jobDir, { recursive: true });
+  const videoDir = path.join(jobDir, '0');
+  fs.mkdirSync(videoDir, { recursive: true });
+  const destPath = path.join(videoDir, 'video.mp4');
+  fs.copyFileSync(file.path, destPath);
+  fs.unlinkSync(file.path); // remove temp file
+  const duration = parseInt(req.body.duration || '30');
+  const credit = req.body.credit || null;
+  // Write urls.json with original filename as display name
+  fs.writeFileSync(path.join(jobDir, 'urls.json'), JSON.stringify({
+    urls: [file.originalname],
+    urlCredits: [],
+    duration,
+    credit
+  }));
+  // Spawn picker.py
+  const appendLog = (prefix: string, data: Buffer) => {
+    const line = `[${prefix}] ${data.toString().trim()}`;
+    console.log(line);
+    fs.appendFileSync(LOG_FILE, line + '\n');
+  };
+  const proc = spawn('python3', ['picker.py', jobDir]);
+  proc.stdout.on('data', d => appendLog('picker', d));
+  proc.stderr.on('data', d => appendLog('picker', d));
+  res.json({ jobId });
+});
+---
+3. src/Studio.tsx — Upload toggle + file input
+New state variables:
+const [mode, setMode] = useState<'url' | 'upload'>('url');
+const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+UI changes inside the input card:
+Above the existing grid layout, add a segmented toggle:
+<div className="flex mb-4 bg-zinc-800 rounded-xl p-1 w-fit">
+  <button onClick={() => setMode('url')}
+    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'url' ? 'bg-blue-600 text-white shadow' : 'text-zinc-400 hover:text-white'}`}>
+    YouTube URL
+  </button>
+  <button onClick={() => setMode('upload')}
+    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'upload' ? 'bg-blue-600 text-white shadow' : 'text-zinc-400 hover:text-white'}`}>
+    Upload File
+  </button>
+</div>
+Conditional rendering in the grid:
+- If mode === 'url': show existing textarea (unchanged)
+- If mode === 'upload': show file input instead of textarea:
+<label className="flex items-center gap-2 text-sm font-semibold text-white">
+  <Film className="w-3.5 h-3.5 text-zinc-500" /> Upload Video
+</label>
+<div className="border-2 border-dashed border-zinc-700 rounded-xl p-8 text-center hover:border-blue-500/50 transition-colors cursor-pointer"
+  onClick={() => fileInputRef.current?.click()}>
+  <input ref={fileInputRef} type="file" accept="video/*" className="hidden"
+    onChange={e => setUploadedFile(e.target.files?.[0] || null)} />
+  {uploadedFile ? (
+    <div className="space-y-1">
+      <p className="text-sm text-zinc-200 font-medium">{uploadedFile.name}</p>
+      <p className="text-xs text-zinc-500">{(uploadedFile.size / (1024*1024)).toFixed(1)} MB</p>
+    </div>
+  ) : (
+    <div className="space-y-2">
+      <Upload className="w-8 h-8 text-zinc-600 mx-auto" />
+      <p className="text-sm text-zinc-500">Click to browse or drag a video file here</p>
+      <p className="text-xs text-zinc-700">mp4, avi, mov, mkv, webm supported</p>
+    </div>
+  )}
+</div>
+Modify handleBrowse to handle both modes:
+- If mode === 'url': existing logic (unchanged)
+- If mode === 'upload':
+  - Create FormData with the uploaded file + duration + credit
+  - POST to /api/picker/upload
+  - Set jobId from response → existing polling takes over
+Button text changes based on mode:
+- URL mode → "Browse & Pick"
+- Upload mode → "Upload & Browse" (or "Process Video")
+The rest of the component (thumbnail grid, selection, pagination, download ZIP bar) stays completely unchanged — it works identically for both modes since the picker job structure is the same.
+---
+Order to implement in new session
+1. picker.py — wrap download in if not exists check
+2. server.ts — add multer import + config + upload endpoint
+3. src/Studio.tsx — add mode state + toggle + file input + upload submit
+4. npm run lint to verify it compiles

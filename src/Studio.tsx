@@ -4,7 +4,7 @@ import {
   Film, Link, Clock, AtSign, Download, Loader2, AlertCircle,
   CheckCircle2, X, ChevronRight, ChevronLeft,
   Trash2, CheckSquare, MinusSquare,
-  CornerRightDown, Play, ServerCrash
+  CornerRightDown, Play, ServerCrash, Upload
 } from 'lucide-react';
 
 interface Thumbnail { file: string; timestamp: number; label: string; }
@@ -204,6 +204,10 @@ function ThumbCard({
 }
 
 export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void }) {
+  const [mode, setMode] = useState<'url' | 'upload'>('url');
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [urls, setUrls] = useState('');
   const [duration, setDuration] = useState('30');
   const [credit, setCredit] = useState('');
@@ -260,22 +264,33 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
   }, [jobId, isLoading]);
 
   const handleBrowse = async () => {
-    const rawLines = urls.trim().split('\n').map(u => u.trim()).filter(Boolean);
-    if (!rawLines.length) return;
-    const parsed = rawLines.map(parseUrlLine);
-    const urlList = parsed.map(p => p.url);
-    const urlCredits = parsed.map(p => p.credit);
     setPickerStatus(null); setIsLoading(true);
     setSelectionOrder([]); setThumbDurations({});
     setThumbStart({}); setThumbSeekVal({}); setThumbSeekErr({});
     setVideos([]); setJobId(null); setPlayingKey(null);
     try {
-      const res = await fetch('/api/picker/start', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls: urlList, urlCredits, duration: parseDurationSecs(duration), credit: credit || null })
-      });
-      const data = await res.json();
-      setJobId(data.jobId);
+      if (mode === 'upload') {
+        if (!uploadedFile) { setIsLoading(false); return; }
+        const formData = new FormData();
+        formData.append('video', uploadedFile);
+        formData.append('duration', String(parseDurationSecs(duration)));
+        if (credit) formData.append('credit', credit);
+        const res = await fetch('/api/picker/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        setJobId(data.jobId);
+      } else {
+        const rawLines = urls.trim().split('\n').map(u => u.trim()).filter(Boolean);
+        if (!rawLines.length) { setIsLoading(false); return; }
+        const parsed = rawLines.map(parseUrlLine);
+        const urlList = parsed.map(p => p.url);
+        const urlCredits = parsed.map(p => p.credit);
+        const res = await fetch('/api/picker/start', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls: urlList, urlCredits, duration: parseDurationSecs(duration), credit: credit || null })
+        });
+        const data = await res.json();
+        setJobId(data.jobId);
+      }
     } catch {
       setIsLoading(false);
       setPickerStatus({ type: 'error', msg: 'Failed to start job.' });
@@ -402,19 +417,65 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
       {/* ── Input Card ── */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
 
+        {/* Mode toggle */}
+        <div className="flex bg-zinc-800 rounded-xl p-1 w-fit">
+          <button onClick={() => setMode('url')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'url' ? 'bg-blue-600 text-white shadow' : 'text-zinc-400 hover:text-white'}`}>
+            YouTube URL
+          </button>
+          <button onClick={() => setMode('upload')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'upload' ? 'bg-blue-600 text-white shadow' : 'text-zinc-400 hover:text-white'}`}>
+            Upload File
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
           <div className="space-y-1.5">
-            <label className="flex items-center gap-2 text-sm font-semibold text-white">
-              <Link className="w-3.5 h-3.5 text-zinc-500" /> Video URLs
-            </label>
-            <textarea
-              value={urls}
-              onChange={e => setUrls(e.target.value)}
-              placeholder={"https://archive.org/details/my-film @HistoryChannel\nhttps://archive.org/details/other-film @BBC\nhttps://vimeo.com/123456789"}
-              rows={3}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 font-mono text-sm focus:ring-1 focus:ring-blue-500/60 outline-none resize-none text-zinc-200 placeholder:text-zinc-700"
-            />
-            <p className="text-xs text-zinc-600">One box for everything. Plain links = Browse & Pick. Comma lines = Batch Run.</p>
+            {mode === 'url' ? (
+              <>
+                <label className="flex items-center gap-2 text-sm font-semibold text-white">
+                  <Link className="w-3.5 h-3.5 text-zinc-500" /> Video URLs
+                </label>
+                <textarea
+                  value={urls}
+                  onChange={e => setUrls(e.target.value)}
+                  placeholder={"https://archive.org/details/my-film @HistoryChannel\nhttps://archive.org/details/other-film @BBC\nhttps://vimeo.com/123456789"}
+                  rows={3}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 font-mono text-sm focus:ring-1 focus:ring-blue-500/60 outline-none resize-none text-zinc-200 placeholder:text-zinc-700"
+                />
+                <p className="text-xs text-zinc-600">One box for everything. Plain links = Browse & Pick. Comma lines = Batch Run.</p>
+              </>
+            ) : (
+              <>
+                <label className="flex items-center gap-2 text-sm font-semibold text-white">
+                  <Film className="w-3.5 h-3.5 text-zinc-500" /> Upload Video
+                </label>
+                <div
+                  className="border-2 border-dashed border-zinc-700 rounded-xl p-8 text-center hover:border-blue-500/50 transition-colors cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={e => setUploadedFile(e.target.files?.[0] || null)}
+                  />
+                  {uploadedFile ? (
+                    <div className="space-y-1">
+                      <p className="text-sm text-zinc-200 font-medium">{uploadedFile.name}</p>
+                      <p className="text-xs text-zinc-500">{(uploadedFile.size / (1024 * 1024)).toFixed(1)} MB</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Upload className="w-8 h-8 text-zinc-600 mx-auto" />
+                      <p className="text-sm text-zinc-500">Click to browse or drag a video file here</p>
+                      <p className="text-xs text-zinc-700">mp4, avi, mov, mkv, webm supported</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -464,10 +525,12 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
             </div>
 
             <div className="flex items-center gap-2">
-              <button onClick={handleBrowse} disabled={isLoading || !urls.trim()}
+              <button
+                onClick={handleBrowse}
+                disabled={isLoading || (mode === 'url' ? !urls.trim() : !uploadedFile)}
                 className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-blue-500/20 active:scale-95">
-                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
-                {isLoading ? 'Loading…' : 'Browse & Pick'}
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : mode === 'upload' ? <Upload className="w-4 h-4" /> : <Film className="w-4 h-4" />}
+                {isLoading ? 'Loading…' : mode === 'upload' ? 'Upload & Browse' : 'Browse & Pick'}
               </button>
               <button onClick={clearAllDownloads} disabled={isClearing}
                 title="Delete all downloaded videos from the server"

@@ -7,6 +7,7 @@ import archiver from 'archiver';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
+import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -238,7 +239,49 @@ asyncio.run(main())
 
   app.use('/thumbnails', express.static(path.resolve(THUMBNAILS_DIR)));
 
+  // ── Multer upload config ──────────────────────────────────────────
+  const videoUpload = multer({
+    dest: path.join(os.tmpdir(), 'clipfactory-uploads'),
+    limits: { fileSize: 10 * 1024 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv'];
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (allowed.includes(ext)) return cb(null, true);
+      cb(new Error(`Invalid file type: ${ext}`));
+    }
+  });
+
   // ── Picker Routes ─────────────────────────────────────────────────
+  app.post('/api/picker/upload', videoUpload.single('video'), (req, res) => {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: 'No file uploaded' });
+    const jobId = randomUUID();
+    const jobDir = path.join(PICKER_DIR, jobId);
+    fs.mkdirSync(jobDir, { recursive: true });
+    const videoDir = path.join(jobDir, '0');
+    fs.mkdirSync(videoDir, { recursive: true });
+    const destPath = path.join(videoDir, 'video.mp4');
+    fs.copyFileSync(file.path, destPath);
+    fs.unlinkSync(file.path);
+    const duration = parseInt(req.body.duration || '30');
+    const credit = req.body.credit || null;
+    fs.writeFileSync(path.join(jobDir, 'urls.json'), JSON.stringify({
+      urls: [file.originalname],
+      urlCredits: [],
+      duration,
+      credit
+    }));
+    const appendLog = (prefix: string, data: Buffer) => {
+      const line = `[${prefix}] ${data.toString().trim()}`;
+      console.log(line);
+      fs.appendFileSync(LOG_FILE, line + '\n');
+    };
+    const proc = spawn('python3', ['picker.py', jobDir]);
+    proc.stdout.on('data', (d: Buffer) => appendLog('picker', d));
+    proc.stderr.on('data', (d: Buffer) => appendLog('picker', d));
+    res.json({ jobId });
+  });
+
   app.post('/api/picker/start', (req, res) => {
     const { urls, urlCredits, duration, credit } = req.body;
     if (!urls || !Array.isArray(urls) || urls.length === 0) {

@@ -67,52 +67,53 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
     status_path = os.path.join(video_dir, "status.json")
     ffmpeg = FFMPEG_PATH or "ffmpeg"
 
-    write_status(status_path, {"status": "downloading", "url": url, "thumbnails": []})
-
-    # ios/mweb bypass n-challenge but don't accept cookies → try without cookies first.
-    # Format 18 (360p muxed mp4) is a universal YouTube fallback — no challenge, no tokens.
-    cookies_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
-    has_cookies = os.path.exists(cookies_file)
-    # (extractor_args or None, use_cookies, format)
-    attempts = [
-        ({'youtube': {'player_client': ['ios']}},  False,       'best'),
-        ({'youtube': {'player_client': ['mweb']}}, False,       'best'),
-        (None,                                      False,       '18'),
-        (None,                                      has_cookies, 'best'),
-    ]
-    last_err = None
-    for ext_args, use_cookies, fmt in attempts:
-        ydl_opts = {
-            'format': fmt,
-            'outtmpl': os.path.join(video_dir, 'video.%(ext)s'),
-            'noplaylist': True,
-            'quiet': False,
-            'no_warnings': False,
-            'retries': 3,
-            'fragment_retries': 3,
-            'socket_timeout': 30,
-        }
-        if ext_args:
-            ydl_opts['extractor_args'] = ext_args
-        if use_cookies:
-            ydl_opts['cookiefile'] = cookies_file
-        try:
-            with YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-            last_err = None
-            break
-        except Exception as e:
-            last_err = e
-            for f in glob.glob(os.path.join(video_dir, 'video.*')):
-                try: os.remove(f)
-                except Exception: pass
-
-    if last_err is not None:
-        write_status(status_path, {"status": "error", "url": url, "error": str(last_err), "thumbnails": []})
-        return
-
-    # Find the downloaded file (yt-dlp uses %(ext)s so the extension varies)
     video_path = os.path.join(video_dir, 'video.mp4')
+    if not (os.path.exists(video_path) and os.path.getsize(video_path) > 1000):
+        write_status(status_path, {"status": "downloading", "url": url, "thumbnails": []})
+
+        # ios/mweb bypass n-challenge but don't accept cookies → try without cookies first.
+        # Format 18 (360p muxed mp4) is a universal YouTube fallback — no challenge, no tokens.
+        cookies_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
+        has_cookies = os.path.exists(cookies_file)
+        # (extractor_args or None, use_cookies, format)
+        attempts = [
+            ({'youtube': {'player_client': ['ios']}},  False,       'best'),
+            ({'youtube': {'player_client': ['mweb']}}, False,       'best'),
+            (None,                                      False,       '18'),
+            (None,                                      has_cookies, 'best'),
+        ]
+        last_err = None
+        for ext_args, use_cookies, fmt in attempts:
+            ydl_opts = {
+                'format': fmt,
+                'outtmpl': os.path.join(video_dir, 'video.%(ext)s'),
+                'noplaylist': True,
+                'quiet': False,
+                'no_warnings': False,
+                'retries': 3,
+                'fragment_retries': 3,
+                'socket_timeout': 30,
+            }
+            if ext_args:
+                ydl_opts['extractor_args'] = ext_args
+            if use_cookies:
+                ydl_opts['cookiefile'] = cookies_file
+            try:
+                with YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+                for f in glob.glob(os.path.join(video_dir, 'video.*')):
+                    try: os.remove(f)
+                    except Exception: pass
+
+        if last_err is not None:
+            write_status(status_path, {"status": "error", "url": url, "error": str(last_err), "thumbnails": []})
+            return
+
+        # Find the downloaded file (yt-dlp uses %(ext)s so the extension varies)
     if not os.path.exists(video_path) or os.path.getsize(video_path) < 1000:
         # Look for non-mp4 files yt-dlp may have created
         candidates = sorted(
