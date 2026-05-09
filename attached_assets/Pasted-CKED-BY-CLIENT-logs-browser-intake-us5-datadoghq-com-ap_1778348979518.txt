@@ -1,0 +1,93 @@
+CKED_BY_CLIENT
+logs.browser-intake-us5-datadoghq.com/api/v2/logs?ddsource=browser&ddtags=sdk_version%3A4.46.0%2Capi%3Afetch%2Cenv%3Aproduction%2Cservice%3Awebsite%2Cversion%3Ac82ef29f&dd-api-key=pub31a5047a3a4692afb84a423db984dc57&dd-evp-origin-version=4.46.0&dd-evp-origin=browser&dd-request-id=8074d621-870e-40da-9130-f57647a719ef:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+logs.browser-intake-us5-datadoghq.com/api/v2/logs?ddsource=browser&ddtags=sdk_version%3A4.46.0%2Capi%3Axhr%2Cenv%3Aproduction%2Cservice%3Awebsite%2Cversion%3Ac82ef29f&dd-api-key=pub31a5047a3a4692afb84a423db984dc57&dd-evp-origin-version=4.46.0&dd-evp-origin=browser&dd-request-id=e751d923-a4fc-476c-8e1c-78ac26d2a5ca:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+logs.browser-intake-us5-datadoghq.com/api/v2/logs?ddsource=browser&ddtags=sdk_version%3A4.46.0%2Capi%3Afetch%2Cenv%3Aproduction%2Cservice%3Awebsite%2Cversion%3Ac82ef29f&dd-api-key=pub31a5047a3a4692afb84a423db984dc57&dd-evp-origin-version=4.46.0&dd-evp-origin=browser&dd-request-id=c881081f-e269-4b35-857c-d2a84d2a603c:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+logs.browser-intake-us5-datadoghq.com/api/v2/logs?ddsource=browser&ddtags=sdk_version%3A4.46.0%2Capi%3Axhr%2Cenv%3Aproduction%2Cservice%3Awebsite%2Cversion%3Ac82ef29f&dd-api-key=pub31a5047a3a4692afb84a423db984dc57&dd-evp-origin-version=4.46.0&dd-evp-origin=browser&dd-request-id=48ba557f-4194-46bf-ab70-e0b755588c41:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+0i8wy8tbht2ow.js:2 Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+C @ 0i8wy8tbht2ow.js:2
+0azyp1zv5s0v4.js:9 Failed to execute 'postMessage' on 'DOMWindow': The target origin provided ('https://3f5eacad-eca3-4e32-9bba-e8e7bb5dd010-00-3kmb5kxfnl7j.sisko.replit.dev') does not match the recipient window's origin ('https://replit.com').
+b @ 0azyp1zv5s0v4.js:9
+workspace_iframe.html?initialPath=%2F&id=default-start-application:32 Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+client:802 WebSocket connection to 'wss://3f5eacad-eca3-4e32-9bba-e8e7bb5dd010-00-3kmb5kxfnl7j.sisko.replit.dev/?token=_BIw5ouZc5VP' failed: 
+(anonymous) @ client:802
+injected.js:37 [vite] failed to connect to websocket (Error: WebSocket closed without opened.). 
+(anonymous) @ injected.js:37
+logs.browser-intake-us5-datadoghq.com/api/v2/logs?ddsource=browser&ddtags=sdk_version%3A4.46.0%2Capi%3Afetch%2Cenv%3Aproduction%2Cservice%3Awebsite%2Cversion%3Ac82ef29f&dd-api-key=pub31a5047a3a4692afb84a423db984dc57&dd-evp-origin-version=4.46.0&dd-evp-origin=browser&dd-request-id=e164eae7-8e36-4169-a117-26a9f9fa07c0:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+logs.browser-intake-us5-datadoghq.com/api/v2/logs?ddsource=browser&ddtags=sdk_version%3A4.46.0%2Capi%3Axhr%2Cenv%3Aproduction%2Cservice%3Awebsite%2Cversion%3Ac82ef29f&dd-api-key=pub31a5047a3a4692afb84a423db984dc57&dd-evp-origin-version=4.46.0&dd-evp-origin=browser&dd-request-id=516f839e-57d4-473d-84ec-338d564d2d16:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+3f5eacad-eca3-4e32-9bba-e8e7bb5dd010-00-3kmb5kxfnl7j.sisko.replit.dev/api/picker/upload:1  Failed to load resource: the server responded with a status of 404 (Not Found)
+events.launchdarkly.com/events/diagnostic/62b35a865152ab14c5942820:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+events.launchdarkly.com/events/diagnostic/62b35a865152ab14c5942820:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+logs.browser-intake-us5-datadoghq.com/api/v2/logs?ddsource=browser&ddtags=sdk_version%3A4.46.0%2Capi%3Afetch%2Cenv%3Aproduction%2Cservice%3Awebsite%2Cversion%3Ac82ef29f&dd-api-key=pub31a5047a3a4692afb84a423db984dc57&dd-evp-origin-version=4.46.0&dd-evp-origin=browser&dd-request-id=867a218e-d74e-4558-bed2-69fb98b4a08b:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+logs.browser-intake-us5-datadoghq.com/api/v2/logs?ddsource=browser&ddtags=sdk_version%3A4.46.0%2Capi%3Axhr%2Cenv%3Aproduction%2Cservice%3Awebsite%2Cversion%3Ac82ef29f&dd-api-key=pub31a5047a3a4692afb84a423db984dc57&dd-evp-origin-version=4.46.0&dd-evp-origin=browser&dd-request-id=c834aadd-31b1-47ce-867c-d6bf94fc31a2:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+3f5eacad-eca3-4e32-9bba-e8e7bb5dd010-00-3kmb5kxfnl7j.sisko.replit.dev/api/picker/upload:1  Failed to load resource: the server responded with a status of 404 (Not Found)
+2stallwart.build.js:1 stallwart: failed ping 1
+stallwart.build.js:1 stallwart: failed ping 2
+02idu.4sr3a4t.js:72  POST https://logs.browser-intake-us5-datadoghq.com/api/v2/logs?ddsource=browser&ddtags=sdk_version%3A4.46.0%2Capi%3Afetch%2Cenv%3Aproduction%2Cservice%3Awebsite%2Cversion%3Ac82ef29f&dd-api-key=pub31a5047a3a4692afb84a423db984dc57&dd-evp-origin-version=4.46.0&dd-evp-origin=browser&dd-request-id=ec62372c-b2c3-4097-86a8-65e413c30f25 net::ERR_BLOCKED_BY_CLIENT
+(anonymous) @ 02idu.4sr3a4t.js:72
+s @ 0-6ku3fhp3l8j.js:2
+tb @ 0-6ku3fhp3l8j.js:2
+tm @ 0-6ku3fhp3l8j.js:2
+send @ 0-6ku3fhp3l8j.js:2
+e.flush @ 0-6ku3fhp3l8j.js:2
+(anonymous) @ 0-6ku3fhp3l8j.js:2
+(anonymous) @ 0-6ku3fhp3l8j.js:2
+e.notify @ 0-6ku3fhp3l8j.js:2
+l @ 0-6ku3fhp3l8j.js:2
+(anonymous) @ 0-6ku3fhp3l8j.js:2
+_ @ 0-6ku3fhp3l8j.js:2
+(anonymous) @ 0-6ku3fhp3l8j.js:2
+r @ 02idu.4sr3a4t.js:72
+02idu.4sr3a4t.js:72  POST https://events.launchdarkly.com/events/bulk/62b35a865152ab14c5942820 net::ERR_BLOCKED_BY_CLIENT
+(anonymous) @ 02idu.4sr3a4t.js:72
+(anonymous) @ 02idu.4sr3a4t.js:72
+promise @ 0380lvvilkaax.js:2
+(anonymous) @ 0380lvvilkaax.js:2
+n.httpRequest @ 0380lvvilkaax.js:2
+t @ 0380lvvilkaax.js:2
+a.sendChunk @ 0380lvvilkaax.js:2
+a.sendEvents @ 0380lvvilkaax.js:2
+a.flush @ 0380lvvilkaax.js:2
+e @ 0380lvvilkaax.js:2
+r @ 02idu.4sr3a4t.js:72
+setTimeout
+(anonymous) @ 02idu.4sr3a4t.js:72
+e @ 0380lvvilkaax.js:2
+r @ 02idu.4sr3a4t.js:72
+setTimeout
+(anonymous) @ 02idu.4sr3a4t.js:72
+e @ 0380lvvilkaax.js:2
+r @ 02idu.4sr3a4t.js:72
+setTimeout
+(anonymous) @ 02idu.4sr3a4t.js:72
+e @ 0380lvvilkaax.js:2
+r @ 02idu.4sr3a4t.js:72
+setTimeout
+(anonymous) @ 02idu.4sr3a4t.js:72
+e @ 0380lvvilkaax.js:2
+r @ 02idu.4sr3a4t.js:72
+setTimeout
+(anonymous) @ 02idu.4sr3a4t.js:72
+e @ 0380lvvilkaax.js:2
+r @ 02idu.4sr3a4t.js:72
+02idu.4sr3a4t.js:72  POST https://logs.browser-intake-us5-datadoghq.com/api/v2/logs?ddsource=browser&ddtags=sdk_version%3A4.46.0%2Capi%3Axhr%2Cenv%3Aproduction%2Cservice%3Awebsite%2Cversion%3Ac82ef29f&dd-api-key=pub31a5047a3a4692afb84a423db984dc57&dd-evp-origin-version=4.46.0&dd-evp-origin=browser&dd-request-id=cc9e2b74-708d-4735-8111-eb5a9371de20 net::ERR_BLOCKED_BY_CLIENT
+(anonymous) @ 02idu.4sr3a4t.js:72
+(anonymous) @ 02idu.4sr3a4t.js:72
+tC @ 0-6ku3fhp3l8j.js:2
+(anonymous) @ 0-6ku3fhp3l8j.js:2
+_ @ 0-6ku3fhp3l8j.js:2
+(anonymous) @ 0-6ku3fhp3l8j.js:2
+Promise.then
+s @ 0-6ku3fhp3l8j.js:2
+tb @ 0-6ku3fhp3l8j.js:2
+tm @ 0-6ku3fhp3l8j.js:2
+send @ 0-6ku3fhp3l8j.js:2
+e.flush @ 0-6ku3fhp3l8j.js:2
+(anonymous) @ 0-6ku3fhp3l8j.js:2
+(anonymous) @ 0-6ku3fhp3l8j.js:2
+e.notify @ 0-6ku3fhp3l8j.js:2
+l @ 0-6ku3fhp3l8j.js:2
+(anonymous) @ 0-6ku3fhp3l8j.js:2
+_ @ 0-6ku3fhp3l8j.js:2
+(anonymous) @ 0-6ku3fhp3l8j.js:2
+r @ 02idu.4sr3a4t.js:72
+02idu.4sr3a4t.js:72  POST https://events.launchdarkly.com/events/bulk/62b35a865152ab14c5942820 net::ERR_BLOCKED_BY_CLIENT
