@@ -251,25 +251,65 @@ asyncio.run(main())
     }
   });
 
+  // ── Chunk upload (5 MB pieces, avoids proxy timeout on large files) ──
+  const chunkUpload = multer({ dest: path.join(os.tmpdir(), 'clipfactory-chunks') });
+
   // ── Picker Routes ─────────────────────────────────────────────────
-  app.post('/api/picker/upload', videoUpload.single('video'), (req, res) => {
+
+  // Receive one chunk and store it by index
+  app.post('/api/picker/upload-chunk', chunkUpload.single('chunk'), (req, res) => {
     const file = req.file;
-    if (!file) return res.status(400).json({ error: 'No file uploaded' });
+    if (!file) return res.status(400).json({ error: 'No chunk received' });
+    const { uploadId, chunkIndex, totalChunks } = req.body;
+    if (!uploadId || chunkIndex === undefined || !totalChunks) {
+      fs.unlinkSync(file.path);
+      return res.status(400).json({ error: 'Missing metadata' });
+    }
+    const chunkDir = path.join(os.tmpdir(), 'clipfactory-chunks', uploadId);
+    fs.mkdirSync(chunkDir, { recursive: true });
+    const dest = path.join(chunkDir, `chunk_${String(chunkIndex).padStart(6, '0')}`);
+    fs.renameSync(file.path, dest);
+    res.json({ ok: true });
+  });
+
+  // Assemble chunks into a job and start picker.py
+  app.post('/api/picker/upload-finalize', express.json(), async (req, res) => {
+    const { uploadId, totalChunks, fileName, duration, credit } = req.body;
+    if (!uploadId || !totalChunks) return res.status(400).json({ error: 'Missing params' });
+
+    const chunkDir = path.join(os.tmpdir(), 'clipfactory-chunks', uploadId);
     const jobId = randomUUID();
     const jobDir = path.join(PICKER_DIR, jobId);
-    fs.mkdirSync(jobDir, { recursive: true });
     const videoDir = path.join(jobDir, '0');
     fs.mkdirSync(videoDir, { recursive: true });
-    const destPath = path.join(videoDir, 'video.mp4');
-    fs.copyFileSync(file.path, destPath);
-    fs.unlinkSync(file.path);
-    const duration = parseInt(req.body.duration || '30');
-    const credit = req.body.credit || null;
+    const videoPath = path.join(videoDir, 'video.mp4');
+
+    try {
+      // Stream-assemble chunks in order
+      await new Promise<void>((resolve, reject) => {
+        const out = fs.createWriteStream(videoPath);
+        out.on('error', reject);
+        const writeNext = (i: number) => {
+          if (i >= totalChunks) { out.end(); return; }
+          const chunkPath = path.join(chunkDir, `chunk_${String(i).padStart(6, '0')}`);
+          const src = fs.createReadStream(chunkPath);
+          src.on('error', reject);
+          src.on('end', () => { fs.unlinkSync(chunkPath); writeNext(i + 1); });
+          src.pipe(out, { end: false });
+        };
+        out.on('finish', resolve);
+        writeNext(0);
+      });
+      try { fs.rmdirSync(chunkDir); } catch {}
+    } catch (err) {
+      return res.status(500).json({ error: 'Chunk assembly failed' });
+    }
+
     fs.writeFileSync(path.join(jobDir, 'urls.json'), JSON.stringify({
-      urls: [file.originalname],
+      urls: [fileName || 'uploaded_video.mp4'],
       urlCredits: [],
-      duration,
-      credit
+      duration: parseInt(duration || '30'),
+      credit: credit || null,
     }));
     const appendLog = (prefix: string, data: Buffer) => {
       const line = `[${prefix}] ${data.toString().trim()}`;

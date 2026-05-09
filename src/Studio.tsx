@@ -206,7 +206,51 @@ function ThumbCard({
 export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void }) {
   const [mode, setMode] = useState<'url' | 'upload'>('url');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
+  const PARALLEL_CHUNKS = 4;
+
+  const uploadChunked = async (
+    file: File,
+    durationSecs: number,
+    creditVal: string,
+    onProgress: (pct: number) => void
+  ): Promise<string> => {
+    const uploadId = crypto.randomUUID();
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    let completed = 0;
+
+    const uploadOne = async (i: number) => {
+      const start = i * CHUNK_SIZE;
+      const chunk = file.slice(start, Math.min(start + CHUNK_SIZE, file.size));
+      const form = new FormData();
+      form.append('chunk', chunk, 'chunk');
+      form.append('uploadId', uploadId);
+      form.append('chunkIndex', String(i));
+      form.append('totalChunks', String(totalChunks));
+      const r = await fetch('/api/picker/upload-chunk', { method: 'POST', body: form });
+      if (!r.ok) throw new Error(`Chunk ${i} failed`);
+      completed++;
+      onProgress(Math.round((completed / totalChunks) * 95));
+    };
+
+    for (let i = 0; i < totalChunks; i += PARALLEL_CHUNKS) {
+      const batch = Array.from({ length: Math.min(PARALLEL_CHUNKS, totalChunks - i) }, (_, j) => uploadOne(i + j));
+      await Promise.all(batch);
+    }
+
+    const res = await fetch('/api/picker/upload-finalize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uploadId, totalChunks, fileName: file.name, duration: durationSecs, credit: creditVal || null }),
+    });
+    if (!res.ok) throw new Error('Finalize failed');
+    onProgress(100);
+    const data = await res.json();
+    return data.jobId;
+  };
 
   const [urls, setUrls] = useState('');
   const [duration, setDuration] = useState('30');
@@ -271,13 +315,15 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
     try {
       if (mode === 'upload') {
         if (!uploadedFile) { setIsLoading(false); return; }
-        const formData = new FormData();
-        formData.append('video', uploadedFile);
-        formData.append('duration', String(parseDurationSecs(duration)));
-        if (credit) formData.append('credit', credit);
-        const res = await fetch('/api/picker/upload', { method: 'POST', body: formData });
-        const data = await res.json();
-        setJobId(data.jobId);
+        setUploadProgress(0);
+        const newJobId = await uploadChunked(
+          uploadedFile,
+          parseDurationSecs(duration),
+          credit,
+          setUploadProgress
+        );
+        setUploadProgress(null);
+        setJobId(newJobId);
       } else {
         const rawLines = urls.trim().split('\n').map(u => u.trim()).filter(Boolean);
         if (!rawLines.length) { setIsLoading(false); return; }
@@ -461,7 +507,18 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                     className="hidden"
                     onChange={e => setUploadedFile(e.target.files?.[0] || null)}
                   />
-                  {uploadedFile ? (
+                  {uploadProgress !== null ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-zinc-300 font-medium">Uploading… {uploadProgress}%</p>
+                      <div className="w-full bg-zinc-700 rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full transition-all duration-200"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-zinc-500">{uploadedFile ? (uploadedFile.size / (1024 * 1024)).toFixed(0) + ' MB total' : ''}</p>
+                    </div>
+                  ) : uploadedFile ? (
                     <div className="space-y-1">
                       <p className="text-sm text-zinc-200 font-medium">{uploadedFile.name}</p>
                       <p className="text-xs text-zinc-500">{(uploadedFile.size / (1024 * 1024)).toFixed(1)} MB</p>
