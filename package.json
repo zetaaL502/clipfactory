@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "npx tsx server.ts",
-    "start": "npx tsx server.ts",
+    "dev": "node_modules/.bin/tsx server.ts",
+    "start": "node_modules/.bin/tsx server.ts",
     "postinstall": "pip install -r requirements.txt --break-system-packages 2>/dev/null || true",
     "build": "vite build",
     "preview": "vite preview",
