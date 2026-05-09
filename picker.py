@@ -157,46 +157,59 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
     write_status(status_path, {"status": "extracting", "url": url, "duration": duration, "credit": credit, "thumbnails": []})
 
     # Use clip_duration as the thumbnail interval so each thumb represents one clip.
-    # Floor at 1s to avoid divide-by-zero.
     THUMB_INTERVAL = max(clip_duration, 1)
 
     # For short videos (< 2 clip-lengths), start at 0 so we capture all content.
     start_offset = THUMB_INTERVAL if (duration and duration > THUMB_INTERVAL * 2) else 0
 
-    cmd = [
-        ffmpeg, "-y",
-        "-ss", str(start_offset), "-i", video_path,
-        "-vf", f"fps=1/{THUMB_INTERVAL},scale=320:-1",
-        "-q:v", "3",
-        os.path.join(thumb_dir, "thumb_%04d.jpg")
-    ]
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
-    )
-    await proc.communicate()
+    # Build list of timestamps to extract
+    dur = duration or 0
+    timestamps = []
+    ts = start_offset
+    while ts < dur:
+        timestamps.append(ts)
+        ts += THUMB_INTERVAL
+    # Always include at least one frame
+    if not timestamps:
+        timestamps = [0]
 
-    # If no thumbs extracted, retry from 0
-    thumbs = sorted([f for f in os.listdir(thumb_dir) if f.endswith('.jpg')])
-    if not thumbs and start_offset > 0:
-        cmd[3] = "0"
-        start_offset = 0
-        proc = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        await proc.communicate()
-        thumbs = sorted([f for f in os.listdir(thumb_dir) if f.endswith('.jpg')])
+    # Fast parallel seek: spawn one FFmpeg per timestamp, up to 6 at a time.
+    # Each call does a keyframe-accurate fast seek (~1s per thumb regardless of
+    # position in the file) — dramatically faster than decoding the whole video.
+    semaphore = asyncio.Semaphore(6)
+
+    async def extract_one(timestamp, idx):
+        out_path = os.path.join(thumb_dir, f"thumb_{idx:04d}.jpg")
+        async with semaphore:
+            proc = await asyncio.create_subprocess_exec(
+                ffmpeg,
+                "-ss", str(timestamp),
+                "-i", video_path,
+                "-frames:v", "1",
+                "-q:v", "3",
+                "-vf", "scale=320:-1",
+                "-y", out_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await proc.communicate()
+
+    await asyncio.gather(*[extract_one(ts, i) for i, ts in enumerate(timestamps)])
 
     thumb_data = []
-    for i, thumb in enumerate(thumbs):
-        ts = start_offset + i * THUMB_INTERVAL
-        m, s = divmod(ts, 60)
-        public_path = thumbnail_public_path(job_dir, video_index, thumb)
-        source_path = os.path.join(thumb_dir, thumb)
-        if os.path.exists(source_path):
-            shutil.copy2(source_path, public_path)
-        thumb_data.append({"file": f"{Path(job_dir).name}/{video_index}/{thumb}", "timestamp": ts, "label": f"{m}:{s:02d}"})
+    for i, ts in enumerate(timestamps):
+        thumb_file = f"thumb_{i:04d}.jpg"
+        source_path = os.path.join(thumb_dir, thumb_file)
+        if not os.path.exists(source_path):
+            continue
+        m, s = divmod(int(ts), 60)
+        public_path = thumbnail_public_path(job_dir, video_index, thumb_file)
+        shutil.copy2(source_path, public_path)
+        thumb_data.append({
+            "file": f"{Path(job_dir).name}/{video_index}/{thumb_file}",
+            "timestamp": ts,
+            "label": f"{m}:{s:02d}",
+        })
 
     write_status(status_path, {
         "status": "done",
