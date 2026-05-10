@@ -189,7 +189,7 @@ asyncio.run(main())
     const files = req.body.files || [];
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename=selected_clips.zip');
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = archiver('zip', { zlib: { level: 1 } }); // video already compressed
     archive.on('error', (err) => { console.error('[zip] archive error:', err); if (!res.headersSent) res.status(500).end(); });
     archive.pipe(res);
     for (const file of files) {
@@ -217,7 +217,7 @@ asyncio.run(main())
   app.get('/api/download-all', (req, res) => {
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename=all_clips.zip');
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = archiver('zip', { zlib: { level: 1 } }); // video already compressed
     archive.on('error', (err) => { console.error('[zip] archive error:', err); if (!res.headersSent) res.status(500).end(); });
     archive.pipe(res);
     if (fs.existsSync(CLIPS_DIR)) {
@@ -252,24 +252,58 @@ asyncio.run(main())
   });
 
   // ── Chunk upload (5 MB pieces, avoids proxy timeout on large files) ──
-  const chunkUpload = multer({ dest: path.join(os.tmpdir(), 'clipfactory-chunks') });
+  // 20 MB limit per chunk — safety margin above the 5 MB client chunk size.
+  const CHUNK_TMP = path.join(os.tmpdir(), 'clipfactory-chunks');
+  const chunkUpload = multer({
+    dest: CHUNK_TMP,
+    limits: { fileSize: 20 * 1024 * 1024 },
+  });
+
+  // Periodic cleanup of stale chunk dirs (abandoned uploads) — runs every hour
+  const cleanChunkTmp = () => {
+    try {
+      if (!fs.existsSync(CHUNK_TMP)) return;
+      const cutoff = Date.now() - 2 * 60 * 60 * 1000; // 2 hours
+      for (const entry of fs.readdirSync(CHUNK_TMP)) {
+        const full = path.join(CHUNK_TMP, entry);
+        try {
+          if (fs.statSync(full).mtimeMs < cutoff) fs.rmSync(full, { recursive: true, force: true });
+        } catch {}
+      }
+    } catch {}
+  };
+  setInterval(cleanChunkTmp, 60 * 60 * 1000);
+  setTimeout(cleanChunkTmp, 10000);
 
   // ── Picker Routes ─────────────────────────────────────────────────
 
-  // Receive one chunk and store it by index
-  app.post('/api/picker/upload-chunk', chunkUpload.single('chunk'), (req, res) => {
-    const file = req.file;
-    if (!file) return res.status(400).json({ error: 'No chunk received' });
-    const { uploadId, chunkIndex, totalChunks } = req.body;
-    if (!uploadId || chunkIndex === undefined || !totalChunks) {
-      fs.unlinkSync(file.path);
-      return res.status(400).json({ error: 'Missing metadata' });
-    }
-    const chunkDir = path.join(os.tmpdir(), 'clipfactory-chunks', uploadId);
-    fs.mkdirSync(chunkDir, { recursive: true });
-    const dest = path.join(chunkDir, `chunk_${String(chunkIndex).padStart(6, '0')}`);
-    fs.renameSync(file.path, dest);
-    res.json({ ok: true });
+  // Receive one chunk and store it by index.
+  // Wraps multer in a callback so aborted/dropped uploads don't crash the server.
+  app.post('/api/picker/upload-chunk', (req, res) => {
+    chunkUpload.single('chunk')(req, res, (err) => {
+      if (err) {
+        // Swallow multer errors (Request aborted, size exceeded, etc.) gracefully
+        if (!res.headersSent) res.status(400).json({ error: err.message || 'Upload error' });
+        return;
+      }
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: 'No chunk received' });
+      const { uploadId, chunkIndex, totalChunks } = req.body;
+      if (!uploadId || chunkIndex === undefined || !totalChunks) {
+        try { fs.unlinkSync(file.path); } catch {}
+        return res.status(400).json({ error: 'Missing metadata' });
+      }
+      const chunkDir = path.join(CHUNK_TMP, uploadId);
+      fs.mkdirSync(chunkDir, { recursive: true });
+      const dest = path.join(chunkDir, `chunk_${String(chunkIndex).padStart(6, '0')}`);
+      try {
+        fs.renameSync(file.path, dest);
+      } catch {
+        try { fs.unlinkSync(file.path); } catch {}
+        return res.status(500).json({ error: 'Failed to save chunk' });
+      }
+      res.json({ ok: true });
+    });
   });
 
   // Assemble chunks into a job and start picker.py
@@ -277,7 +311,7 @@ asyncio.run(main())
     const { uploadId, totalChunks, fileName, duration, credit } = req.body;
     if (!uploadId || !totalChunks) return res.status(400).json({ error: 'Missing params' });
 
-    const chunkDir = path.join(os.tmpdir(), 'clipfactory-chunks', uploadId);
+    const chunkDir = path.join(CHUNK_TMP, uploadId);
     const jobId = randomUUID();
     const jobDir = path.join(PICKER_DIR, jobId);
     const videoDir = path.join(jobDir, '0');
@@ -292,16 +326,21 @@ asyncio.run(main())
         const writeNext = (i: number) => {
           if (i >= totalChunks) { out.end(); return; }
           const chunkPath = path.join(chunkDir, `chunk_${String(i).padStart(6, '0')}`);
+          if (!fs.existsSync(chunkPath)) { reject(new Error(`Missing chunk ${i}`)); return; }
           const src = fs.createReadStream(chunkPath);
           src.on('error', reject);
-          src.on('end', () => { fs.unlinkSync(chunkPath); writeNext(i + 1); });
+          src.on('end', () => { try { fs.unlinkSync(chunkPath); } catch {} writeNext(i + 1); });
           src.pipe(out, { end: false });
         };
         out.on('finish', resolve);
         writeNext(0);
       });
-      try { fs.rmdirSync(chunkDir); } catch {}
+      // Clean up chunk dir after successful assembly
+      try { fs.rmSync(chunkDir, { recursive: true, force: true }); } catch {}
     } catch (err) {
+      // Clean up partial chunks and incomplete output on failure
+      try { fs.rmSync(chunkDir, { recursive: true, force: true }); } catch {}
+      try { if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath); } catch {}
       return res.status(500).json({ error: 'Chunk assembly failed' });
     }
 
@@ -429,15 +468,30 @@ asyncio.run(main())
   });
 
   // Progress store: progressId -> state
-  const extractJobs = new Map<string, { current: number; total: number; done: boolean; error?: string; zipPath?: string }>();
+  const MAX_SELECTIONS = 200;
+  const extractJobs = new Map<string, { current: number; total: number; done: boolean; error?: string; zipPath?: string; createdAt: number }>();
+
+  // Purge extractJobs entries older than 2 hours to prevent memory leak
+  setInterval(() => {
+    const cutoff = Date.now() - 2 * 60 * 60 * 1000;
+    for (const [id, job] of extractJobs) {
+      if (job.createdAt < cutoff) {
+        if (job.zipPath) { try { fs.rmSync(path.dirname(job.zipPath), { recursive: true, force: true }); } catch {} }
+        extractJobs.delete(id);
+      }
+    }
+  }, 30 * 60 * 1000);
 
   app.post('/api/picker/extract-zip', (req, res) => {
     const { jobId, selections, duration, credit, creditSize } = req.body;
     if (!jobId || !Array.isArray(selections) || selections.length === 0) {
       return res.status(400).json({ error: 'Invalid request' });
     }
+    if (selections.length > MAX_SELECTIONS) {
+      return res.status(400).json({ error: `Too many clips selected (max ${MAX_SELECTIONS})` });
+    }
     const progressId = randomUUID();
-    extractJobs.set(progressId, { current: 0, total: selections.length, done: false });
+    extractJobs.set(progressId, { current: 0, total: selections.length, done: false, createdAt: Date.now() });
     res.json({ progressId });
 
     // Run extraction in background — clips extracted in parallel (4 at a time)
