@@ -7,7 +7,7 @@ import {
   CornerRightDown, Play, ServerCrash, Upload
 } from 'lucide-react';
 
-interface Thumbnail { file: string; timestamp: number; label: string; }
+interface Thumbnail { file: string; timestamp: number; label: string; clipDuration?: number; }
 interface VideoData {
   index: number; url: string; credit?: string | null;
   status: 'queued' | 'downloading' | 'extracting' | 'done' | 'error';
@@ -383,7 +383,9 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
       const sels = selectionOrder.map((k: string) => {
         const [vi, ts] = k.split(':').map(Number);
         const rawDur = thumbDurations[k] || '';
-        const clipDuration = rawDur.trim() ? parseDurationSecs(rawDur) : globalDurSecs;
+        const thumb = videos.find(v => v.index === vi)?.thumbnails.find(t => t.timestamp === ts);
+        const thumbDefaultDur = thumb?.clipDuration ?? globalDurSecs;
+        const clipDuration = rawDur.trim() ? parseDurationSecs(rawDur) : thumbDefaultDur;
         return { videoIndex: vi, timestamp: ts, duration: clipDuration };
       });
       const startRes = await fetch('/api/picker/extract-zip', {
@@ -700,7 +702,8 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
                           const k = selKey(video.index, thumb.timestamp);
                           const selIdx = selectionOrder.indexOf(k);
                           const rawDur = thumbDurations[k] || '';
-                          const effectiveDurSecs = rawDur.trim() ? parseDurationSecs(rawDur) : globalDurSecs;
+                          const thumbDefaultDur = thumb.clipDuration ?? globalDurSecs;
+                          const effectiveDurSecs = rawDur.trim() ? parseDurationSecs(rawDur) : thumbDefaultDur;
                           return (
                             <ThumbCard key={k} thumb={thumb}
                               clipDurationSecs={effectiveDurSecs}

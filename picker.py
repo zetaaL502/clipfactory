@@ -205,10 +205,16 @@ async def process_video(job_dir, video_index, url, clip_duration=30, credit=None
         m, s = divmod(int(ts), 60)
         public_path = thumbnail_public_path(job_dir, video_index, thumb_file)
         shutil.copy2(source_path, public_path)
+        # Actual available duration for this clip — may be less than THUMB_INTERVAL
+        # if the video ends before the next interval boundary.
+        actual_clip_dur = THUMB_INTERVAL
+        if dur and ts + THUMB_INTERVAL > dur:
+            actual_clip_dur = max(1, int(dur - ts))
         thumb_data.append({
             "file": f"{Path(job_dir).name}/{video_index}/{thumb_file}",
             "timestamp": ts,
             "label": f"{m}:{s:02d}",
+            "clipDuration": actual_clip_dur,
         })
 
     write_status(status_path, {
