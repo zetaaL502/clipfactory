@@ -76,17 +76,30 @@ def cut_local_video(local_path, timestamp, duration, output_path, credit=None, f
         else:
             vf_filter = f"drawtext=text='{escaped}':fontsize={font_size}:fontcolor=white:borderw=1:bordercolor=black:x=8:y=h-th-8"
 
-    cmd = [
-        ffmpeg, "-y",
-        "-ss", str(int(timestamp)),
-        "-i", local_path,
-        "-t", str(int(duration)),
-        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-        "-movflags", "+faststart",
-    ]
-    if vf_filter:
-        cmd += ["-vf", vf_filter]
-    cmd += [output_path]
+    if credit and vf_filter:
+        # Need re-encode to burn in watermark — use ultrafast for speed
+        cmd = [
+            ffmpeg, "-y",
+            "-ss", str(int(timestamp)),
+            "-i", local_path,
+            "-t", str(int(duration)),
+            "-vf", vf_filter,
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
+            output_path,
+        ]
+    else:
+        # No watermark — stream copy (nearly instant, no quality loss)
+        cmd = [
+            ffmpeg, "-y",
+            "-ss", str(int(timestamp)),
+            "-i", local_path,
+            "-t", str(int(duration)),
+            "-c", "copy",
+            "-movflags", "+faststart",
+            output_path,
+        ]
     try:
         result = subprocess.run(cmd, capture_output=True, timeout=300)
         if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 100:

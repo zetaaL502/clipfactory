@@ -440,17 +440,16 @@ asyncio.run(main())
     extractJobs.set(progressId, { current: 0, total: selections.length, done: false });
     res.json({ progressId });
 
-    // Run extraction in background
+    // Run extraction in background — clips extracted in parallel (4 at a time)
     (async () => {
       try {
         const jobDir = path.join(PICKER_DIR, path.basename(jobId));
         const clipsDir = path.join(jobDir, 'clips');
         fs.mkdirSync(clipsDir, { recursive: true });
-        const extractedPaths: { filePath: string; name: string }[] = [];
         const padLen = String(selections.length).length;
+        let completedCount = 0;
 
-        for (let i = 0; i < selections.length; i++) {
-          extractJobs.set(progressId, { current: i, total: selections.length, done: false });
+        const extractOne = async (i: number): Promise<{ filePath: string; name: string } | null> => {
           const sel = selections[i];
           const clipDuration = (sel.duration && sel.duration > 0) ? sel.duration : (duration || 10);
           const seqNum = String(i + 1).padStart(padLen, '0');
@@ -458,7 +457,6 @@ asyncio.run(main())
           const clipPath = path.join(clipsDir, clipName);
           const localVideo = path.join(jobDir, String(sel.videoIndex), 'video.mp4');
 
-          // Always use Python script for clip extraction (handles FFmpeg path correctly)
           let sourceArg = localVideo;
           let perVideoCredit: string = '';
           const videoStatusPath = path.join(jobDir, String(sel.videoIndex), 'status.json');
@@ -468,12 +466,12 @@ asyncio.run(main())
               perVideoCredit = (videoStatus.credit as string) || '';
               if (!fs.existsSync(localVideo)) {
                 const url = videoStatus.url as string | undefined;
-                if (!url) continue;
+                if (!url) return null;
                 sourceArg = url;
               }
-            } catch { if (!fs.existsSync(localVideo)) continue; }
+            } catch { if (!fs.existsSync(localVideo)) return null; }
           } else if (!fs.existsSync(localVideo)) {
-            continue;
+            return null;
           }
 
           const logExtract = (prefix: string, data: Buffer) => {
@@ -484,7 +482,6 @@ asyncio.run(main())
           fs.appendFileSync(LOG_FILE, `[extract] Clip ${i + 1}/${selections.length}: t=${sel.timestamp}s dur=${clipDuration}s → ${clipName}\n`);
           await new Promise<void>(resolve => {
             const python = process.platform === 'win32' ? 'python' : 'python3';
-            // Per-URL @credit takes priority over the global credit field
             const creditArg = perVideoCredit || (credit as string) || '';
             const fontSizeArg = String(creditSize || 11);
             const proc = spawn(python, ['picker_extract.py', sourceArg, String(sel.timestamp), String(clipDuration), clipPath, creditArg, fontSizeArg]);
@@ -494,8 +491,23 @@ asyncio.run(main())
             proc.on('error', () => resolve());
           });
 
-          if (fs.existsSync(clipPath) && fs.statSync(clipPath).size > 100) extractedPaths.push({ filePath: clipPath, name: clipName });
+          completedCount++;
+          extractJobs.set(progressId, { current: completedCount, total: selections.length, done: false });
+
+          if (fs.existsSync(clipPath) && fs.statSync(clipPath).size > 100) return { filePath: clipPath, name: clipName };
+          return null;
+        };
+
+        // Run up to 4 clip extractions concurrently
+        const CONCURRENCY = 4;
+        const results: ({ filePath: string; name: string } | null)[] = new Array(selections.length).fill(null);
+        for (let i = 0; i < selections.length; i += CONCURRENCY) {
+          const batch = Array.from({ length: Math.min(CONCURRENCY, selections.length - i) }, (_, j) => extractOne(i + j));
+          const batchResults = await Promise.all(batch);
+          batchResults.forEach((r, j) => { results[i + j] = r; });
         }
+
+        const extractedPaths = results.filter((r): r is { filePath: string; name: string } => r !== null);
 
         if (extractedPaths.length === 0) {
           const errMsg = 'No clips were extracted. Make sure thumbnails finished loading.';
@@ -507,28 +519,22 @@ asyncio.run(main())
         fs.appendFileSync(LOG_FILE, `[extract] ${extractedPaths.length}/${selections.length} clips extracted. Saving to library...\n`);
 
         // Copy extracted clips to main CLIPS_DIR
-        if (!fs.existsSync(CLIPS_DIR)) {
-          fs.mkdirSync(CLIPS_DIR, { recursive: true });
-        }
+        if (!fs.existsSync(CLIPS_DIR)) fs.mkdirSync(CLIPS_DIR, { recursive: true });
         for (const c of extractedPaths) {
           const destPath = path.join(CLIPS_DIR, c.name);
           try {
             fs.copyFileSync(c.filePath, destPath);
-            const msg = `[extract] Saved clip to library: ${c.name}`;
-            console.log(msg);
-            fs.appendFileSync(LOG_FILE, msg + '\n');
+            fs.appendFileSync(LOG_FILE, `[extract] Saved clip to library: ${c.name}\n`);
           } catch (e) {
-            const msg = `[extract] Failed to save clip ${c.name}: ${e}`;
-            console.error(msg);
-            fs.appendFileSync(LOG_FILE, msg + '\n');
+            fs.appendFileSync(LOG_FILE, `[extract] Failed to save clip ${c.name}: ${e}\n`);
           }
         }
 
-        // Write ZIP to a temp file
+        // ZIP at store level (level 1) — video is already compressed, high levels waste CPU
         const zipPath = path.join(jobDir, 'clips.zip');
         await new Promise<void>((resolve, reject) => {
           const out = fs.createWriteStream(zipPath);
-          const archive = archiver('zip', { zlib: { level: 6 } });
+          const archive = archiver('zip', { zlib: { level: 1 } });
           archive.on('error', reject);
           out.on('close', resolve);
           archive.pipe(out);

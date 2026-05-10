@@ -210,7 +210,7 @@ export default function Studio({ onClipsUpdated }: { onClipsUpdated?: () => void
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
-  const PARALLEL_CHUNKS = 4;
+  const PARALLEL_CHUNKS = 8;
 
   const uploadChunked = async (
     file: File,
